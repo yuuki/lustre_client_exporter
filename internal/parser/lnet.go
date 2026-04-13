@@ -131,11 +131,11 @@ type lnetCtlNetShow struct {
 	} `json:"net" yaml:"net"`
 }
 
-// unmarshalJSONOrYAML tries JSON first, then YAML. Returns a descriptive error on failure.
+// unmarshalJSONOrYAML tries YAML first (lnetctl default), then JSON.
 func unmarshalJSONOrYAML(data []byte, dest any, label string) error {
-	if err := json.Unmarshal(data, dest); err != nil {
-		if yamlErr := yaml.Unmarshal(data, dest); yamlErr != nil {
-			return fmt.Errorf("%s: failed to parse as JSON (%w) or YAML (%w)", label, err, yamlErr)
+	if err := yaml.Unmarshal(data, dest); err != nil {
+		if jsonErr := json.Unmarshal(data, dest); jsonErr != nil {
+			return fmt.Errorf("%s: failed to parse as YAML (%w) or JSON (%w)", label, err, jsonErr)
 		}
 	}
 	return nil

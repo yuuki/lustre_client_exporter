@@ -94,3 +94,25 @@ func TestClientCollector_NoTargets(t *testing.T) {
 		t.Errorf("got %d metrics for no targets, want 0", len(metrics))
 	}
 }
+
+func TestClientCollector_RPCStatsWithoutStatsFile(t *testing.T) {
+	r := reader.NewFakeReader()
+	r.Globs["/proc/fs/lustre/llite/*/stats"] = nil
+	r.Globs["/proc/fs/lustre/mdc/*/stats"] = nil
+	r.Globs["/proc/fs/lustre/osc/*/stats"] = nil
+	r.Globs["/proc/fs/lustre/osc/*/rpc_stats"] = []string{
+		"/proc/fs/lustre/osc/lfs-dn-h-OST0000-osc-ff36f2b293cbd800/rpc_stats",
+	}
+	loadFixture(t, r, "/proc/fs/lustre/osc/lfs-dn-h-OST0000-osc-ff36f2b293cbd800/rpc_stats", "../testdata/osc/rpc_stats.txt")
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	c := NewClientCollector(r, discovery.DefaultPathConfig(), logger)
+	metrics, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(metrics) == 0 {
+		t.Fatal("expected rpc_stats metrics, got none")
+	}
+}

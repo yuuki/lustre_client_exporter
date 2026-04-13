@@ -107,7 +107,7 @@ func (c *LNetCollector) collectFromLNetCtl(ctx context.Context) ([]parser.Observ
 }
 
 func dropGlobalLNetCountStats(obs []parser.Observation) []parser.Observation {
-	filtered := obs[:0]
+	filtered := make([]parser.Observation, 0, len(obs))
 	for _, o := range obs {
 		if len(o.Labels) == 0 {
 			switch o.MetricID {

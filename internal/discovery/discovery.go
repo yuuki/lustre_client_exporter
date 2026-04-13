@@ -33,15 +33,15 @@ func HealthPath(cfg PathConfig) string {
 	return filepath.Join(cfg.SysFS, "fs", "lustre", "health_check")
 }
 
-// SptlrpcPath returns the path to the sptlrpc encrypt_page_pools file.
-func SptlrpcPath(cfg PathConfig) string {
+// sptlrpcPath returns the debugfs path to the sptlrpc encrypt_page_pools file.
+func sptlrpcPath(cfg PathConfig) string {
 	return filepath.Join(cfg.DebugFS, "lustre", "sptlrpc", "encrypt_page_pools")
 }
 
 // SptlrpcPaths returns known locations for the sptlrpc encrypt_page_pools file.
 func SptlrpcPaths(cfg PathConfig) []string {
 	return []string{
-		SptlrpcPath(cfg),
+		sptlrpcPath(cfg),
 		filepath.Join(cfg.ProcFS, "fs", "lustre", "sptlrpc", "encrypt_page_pools"),
 	}
 }
@@ -55,8 +55,8 @@ const (
 	LNetSourceLNetCtl
 )
 
-// LNetStatsPath returns the legacy procfs path to the LNet stats file.
-func LNetStatsPath(cfg PathConfig) string {
+// lnetStatsPath returns the legacy procfs path to the LNet stats file.
+func lnetStatsPath(cfg PathConfig) string {
 	return filepath.Join(cfg.ProcFS, "sys", "lnet", "stats")
 }
 
@@ -69,7 +69,7 @@ func LNetDebugFSStatsPath(cfg PathConfig) string {
 func LNetStatsPaths(cfg PathConfig) []string {
 	return []string{
 		LNetDebugFSStatsPath(cfg),
-		LNetStatsPath(cfg),
+		lnetStatsPath(cfg),
 	}
 }
 
@@ -118,6 +118,7 @@ type ClientTarget struct {
 // DiscoverClients enumerates all llite, mdc, and osc targets.
 func DiscoverClients(r reader.Reader, cfg PathConfig) ([]ClientTarget, error) {
 	var targets []ClientTarget
+	seen := map[string]int{}
 
 	for _, component := range []string{"llite", "mdc", "osc"} {
 		pattern := filepath.Join(cfg.ProcFS, "fs", "lustre", component, "*", "stats")
@@ -136,7 +137,34 @@ func DiscoverClients(r reader.Reader, cfg PathConfig) ([]ClientTarget, error) {
 			if component == "mdc" || component == "osc" {
 				ct.RpcStatsPath = filepath.Join(dir, "rpc_stats")
 			}
+			key := component + "/" + ct.Name
+			seen[key] = len(targets)
 			targets = append(targets, ct)
+		}
+	}
+
+	for _, component := range []string{"mdc", "osc"} {
+		pattern := filepath.Join(cfg.ProcFS, "fs", "lustre", component, "*", "rpc_stats")
+		matches, err := r.Glob(pattern)
+		if err != nil {
+			continue
+		}
+		for _, rpcStatsPath := range matches {
+			dir := filepath.Dir(rpcStatsPath)
+			name := filepath.Base(dir)
+			key := component + "/" + name
+			if idx, ok := seen[key]; ok {
+				targets[idx].RpcStatsPath = rpcStatsPath
+				continue
+			}
+
+			seen[key] = len(targets)
+			targets = append(targets, ClientTarget{
+				Component:    component,
+				Name:         name,
+				RpcStatsPath: rpcStatsPath,
+				BasePath:     dir,
+			})
 		}
 	}
 

@@ -2,6 +2,7 @@ package reader
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -62,6 +63,9 @@ func (r *FSReader) RunCommand(ctx context.Context, name string, args ...string) 
 
 // ReadFirstAvailable tries each path in order, returning data from the first successful read.
 func ReadFirstAvailable(r Reader, paths []string) ([]byte, string, error) {
+	if len(paths) == 0 {
+		return nil, "", fmt.Errorf("no paths provided")
+	}
 	var lastErr error
 	for _, p := range paths {
 		data, err := r.ReadFile(p)
