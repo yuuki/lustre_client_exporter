@@ -2,7 +2,6 @@ package collector
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -13,7 +12,6 @@ import (
 	"github.com/yuuki/lustre_exporter/internal/reader"
 )
 
-// LNetCollector reads LNet statistics from debugfs/procfs or lnetctl.
 type LNetCollector struct {
 	reader     reader.Reader
 	pathCfg    discovery.PathConfig
@@ -62,13 +60,8 @@ func (c *LNetCollector) Collect(ctx context.Context) ([]prometheus.Metric, error
 		allObs = append(allObs, obs...)
 	}
 
-	// Collect params regardless of stats source
-	paramObs, err := c.collectParams()
-	if err != nil {
-		c.logger.Warn("failed to collect LNet params", "error", err)
-	} else {
-		allObs = append(allObs, paramObs...)
-	}
+	paramObs := c.collectParams()
+	allObs = append(allObs, paramObs...)
 
 	mapped, err := mapper.Map(allObs)
 	if err != nil {
@@ -78,19 +71,12 @@ func (c *LNetCollector) Collect(ctx context.Context) ([]prometheus.Metric, error
 }
 
 func (c *LNetCollector) collectFromDebugFS() ([]parser.Observation, error) {
-	targets, err := discovery.DiscoverLNet(c.reader, c.pathCfg)
+	path := discovery.LNetStatsPath(c.pathCfg)
+	data, err := c.reader.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	if targets.StatsPath == "" {
-		return nil, fmt.Errorf("lnet stats file not found")
-	}
-
-	data, err := c.reader.ReadFile(targets.StatsPath)
-	if err != nil {
-		return nil, err
-	}
-	return parser.ParseLNetStats(data, targets.StatsPath)
+	return parser.ParseLNetStats(data, path)
 }
 
 func (c *LNetCollector) collectFromLNetCtl(ctx context.Context) ([]parser.Observation, error) {
@@ -101,17 +87,12 @@ func (c *LNetCollector) collectFromLNetCtl(ctx context.Context) ([]parser.Observ
 	return parser.ParseLNetCtlStats(data, "lnetctl stats show")
 }
 
-func (c *LNetCollector) collectParams() ([]parser.Observation, error) {
-	targets, err := discovery.DiscoverLNet(c.reader, c.pathCfg)
-	if err != nil {
-		return nil, err
-	}
-
+func (c *LNetCollector) collectParams() []parser.Observation {
 	var allObs []parser.Observation
-	for paramName, path := range targets.ParamPaths {
+	for _, paramName := range discovery.LNetParamNames {
+		path := discovery.LNetParamPath(c.pathCfg, paramName)
 		data, err := c.reader.ReadFile(path)
 		if err != nil {
-			c.logger.Warn("failed to read LNet param", "param", paramName, "error", err)
 			continue
 		}
 		obs, err := parser.ParseLNetParam(data, path, paramName)
@@ -121,5 +102,5 @@ func (c *LNetCollector) collectParams() ([]parser.Observation, error) {
 		}
 		allObs = append(allObs, obs...)
 	}
-	return allObs, nil
+	return allObs
 }

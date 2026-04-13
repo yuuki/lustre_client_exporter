@@ -11,7 +11,6 @@ import (
 	"github.com/yuuki/lustre_exporter/internal/reader"
 )
 
-// SptlrpcCollector reads sptlrpc/encrypt_page_pools and emits 15 metrics.
 type SptlrpcCollector struct {
 	reader  reader.Reader
 	pathCfg discovery.PathConfig
@@ -24,17 +23,14 @@ func NewSptlrpcCollector(r reader.Reader, cfg discovery.PathConfig) *SptlrpcColl
 func (c *SptlrpcCollector) Name() string { return "sptlrpc" }
 
 func (c *SptlrpcCollector) Collect(ctx context.Context) ([]prometheus.Metric, error) {
-	target, err := discovery.DiscoverSptlrpc(c.reader, c.pathCfg)
+	path := discovery.SptlrpcPath(c.pathCfg)
+
+	data, err := c.reader.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 
-	data, err := c.reader.ReadFile(target.Path)
-	if err != nil {
-		return nil, err
-	}
-
-	observations, err := parser.ParseEncryptPagePools(data, target.Path)
+	observations, err := parser.ParseEncryptPagePools(data, path)
 	if err != nil {
 		return nil, err
 	}

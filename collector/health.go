@@ -11,7 +11,6 @@ import (
 	"github.com/yuuki/lustre_exporter/internal/reader"
 )
 
-// HealthCollector reads /sys/fs/lustre/health_check and emits lustre_health_check.
 type HealthCollector struct {
 	reader  reader.Reader
 	pathCfg discovery.PathConfig
@@ -24,17 +23,14 @@ func NewHealthCollector(r reader.Reader, cfg discovery.PathConfig) *HealthCollec
 func (c *HealthCollector) Name() string { return "health" }
 
 func (c *HealthCollector) Collect(ctx context.Context) ([]prometheus.Metric, error) {
-	target, err := discovery.DiscoverHealth(c.reader, c.pathCfg)
+	path := discovery.HealthPath(c.pathCfg)
+
+	data, err := c.reader.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 
-	data, err := c.reader.ReadFile(target.Path)
-	if err != nil {
-		return nil, err
-	}
-
-	observations, err := parser.ParseHealth(data, target.Path)
+	observations, err := parser.ParseHealth(data, path)
 	if err != nil {
 		return nil, err
 	}
