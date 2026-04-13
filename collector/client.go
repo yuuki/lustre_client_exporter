@@ -77,7 +77,7 @@ func (c *ClientCollector) collectLLite(t discovery.ClientTarget) ([]parser.Obser
 	if err != nil {
 		return nil, err
 	}
-	obs, err := parser.ParseLLiteStats(data, t.StatsPath, t.Component, t.Name)
+	obs, err := parser.ParseLLiteStats(data, t.StatsPath, "client", t.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +91,7 @@ func (c *ClientCollector) collectLLite(t discovery.ClientTarget) ([]parser.Obser
 			c.logger.Debug("llite file not found", "file", name, "target", t.Name)
 			continue
 		}
-		obs, err := parser.ParseLLiteSingleFile(data, path, name, t.Component, t.Name)
+		obs, err := parser.ParseLLiteSingleFile(data, path, name, "client", t.Name)
 		if err != nil {
 			c.logger.Warn("failed to parse llite file", "file", name, "error", err)
 			continue
@@ -111,7 +111,7 @@ func (c *ClientCollector) collectRPC(t discovery.ClientTarget) ([]parser.Observa
 		if err != nil {
 			c.logger.Debug("rpc_stats not available", "component", t.Component, "target", t.Name)
 		} else {
-			obs, err := parser.ParseRPCStats(data, t.RpcStatsPath, t.Component, t.Name)
+			obs, err := parser.ParseRPCStats(data, t.RpcStatsPath, "client", t.Name)
 			if err != nil {
 				return nil, err
 			}

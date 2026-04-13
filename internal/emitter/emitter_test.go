@@ -44,7 +44,7 @@ func TestEmit_Counter(t *testing.T) {
 				Type:      parser.Counter,
 				LabelKeys: []string{"component", "target"},
 			},
-			LabelVals: []string{"llite", "scratch-ffff0001"},
+			LabelVals: []string{"client", "scratch-ffff0001"},
 			Value:     42.0,
 		},
 	}
@@ -71,8 +71,8 @@ func TestEmit_Counter(t *testing.T) {
 	for _, l := range labels {
 		found[l.GetName()] = l.GetValue()
 	}
-	if found["component"] != "llite" {
-		t.Errorf("component=%q, want %q", found["component"], "llite")
+	if found["component"] != "client" {
+		t.Errorf("component=%q, want %q", found["component"], "client")
 	}
 	if found["target"] != "scratch-ffff0001" {
 		t.Errorf("target=%q, want %q", found["target"], "scratch-ffff0001")
