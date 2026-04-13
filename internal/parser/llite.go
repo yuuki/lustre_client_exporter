@@ -11,10 +11,6 @@ import (
 // Other stat lines produce a stats_total observation with an operation label.
 func ParseLLiteStats(data []byte, source string, component string, target string) ([]Observation, error) {
 	var observations []Observation
-	labels := map[string]string{
-		"component": component,
-		"target":    target,
-	}
 
 	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
 	for _, line := range lines {
@@ -49,7 +45,6 @@ func ParseLLiteStats(data []byte, source string, component string, target string
 		}
 	}
 
-	_ = labels // labels are embedded in each observation
 	return observations, nil
 }
 
