@@ -3,7 +3,6 @@ package emitter
 import (
 	"testing"
 
-	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/yuuki/lustre_exporter/internal/mapper"
 	"github.com/yuuki/lustre_exporter/internal/parser"
@@ -17,10 +16,8 @@ func TestEmit_HealthGauge(t *testing.T) {
 				Help: "Lustre filesystem health status (1 = healthy, 0 = unhealthy).",
 				Type: parser.Gauge,
 			},
-			LabelKeys:  nil,
-			LabelVals:  nil,
-			Value:      1.0,
-			MetricType: parser.Gauge,
+			LabelVals: nil,
+			Value:     1.0,
 		},
 	}
 
@@ -47,10 +44,8 @@ func TestEmit_Counter(t *testing.T) {
 				Type:      parser.Counter,
 				LabelKeys: []string{"component", "target"},
 			},
-			LabelKeys:  []string{"component", "target"},
-			LabelVals:  []string{"llite", "scratch-ffff0001"},
-			Value:      42.0,
-			MetricType: parser.Counter,
+			LabelVals: []string{"llite", "scratch-ffff0001"},
+			Value:     42.0,
 		},
 	}
 
@@ -84,7 +79,3 @@ func TestEmit_Counter(t *testing.T) {
 	}
 }
 
-func init() {
-	// Ensure prometheus import is used
-	_ = prometheus.NewRegistry()
-}

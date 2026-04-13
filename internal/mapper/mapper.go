@@ -8,12 +8,9 @@ import (
 
 // MappedObservation is an observation enriched with the public metric definition.
 type MappedObservation struct {
-	Def        MetricDef
-	Labels     map[string]string
-	LabelKeys  []string
-	LabelVals  []string
-	Value      float64
-	MetricType parser.MetricType
+	Def       MetricDef
+	LabelVals []string
+	Value     float64
 }
 
 // Map converts internal observations to mapped observations using the Registry.
@@ -25,20 +22,15 @@ func Map(observations []parser.Observation) ([]MappedObservation, error) {
 			return nil, fmt.Errorf("unknown metric ID: %s", obs.MetricID)
 		}
 
-		labelKeys := make([]string, 0, len(def.LabelKeys))
-		labelVals := make([]string, 0, len(def.LabelKeys))
-		for _, k := range def.LabelKeys {
-			labelKeys = append(labelKeys, k)
-			labelVals = append(labelVals, obs.Labels[k])
+		labelVals := make([]string, len(def.LabelKeys))
+		for i, k := range def.LabelKeys {
+			labelVals[i] = obs.Labels[k]
 		}
 
 		result = append(result, MappedObservation{
-			Def:        def,
-			Labels:     obs.Labels,
-			LabelKeys:  labelKeys,
-			LabelVals:  labelVals,
-			Value:      obs.Value,
-			MetricType: obs.MetricType,
+			Def:       def,
+			LabelVals: labelVals,
+			Value:     obs.Value,
 		})
 	}
 	return result, nil
