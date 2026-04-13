@@ -111,7 +111,7 @@ func (c *ClientCollector) collectRPC(t discovery.ClientTarget) ([]parser.Observa
 		if err != nil {
 			c.logger.Debug("rpc_stats not available", "component", t.Component, "target", t.Name)
 		} else {
-			obs, err := parser.ParseRPCStats(data, t.RpcStatsPath, "client", t.Name)
+			obs, err := parser.ParseRPCStats(data, t.RpcStatsPath, "client", t.Name, t.Component)
 			if err != nil {
 				return nil, err
 			}

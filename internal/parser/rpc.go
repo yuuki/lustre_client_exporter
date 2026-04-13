@@ -8,7 +8,7 @@ import (
 
 // ParseRPCStats parses mdc/osc rpc_stats files.
 // Extracts pages_per_rpc, rpcs_in_flight, and offset sections.
-func ParseRPCStats(data []byte, source string, component string, target string) ([]Observation, error) {
+func ParseRPCStats(data []byte, source string, component string, target string, rpcType string) ([]Observation, error) {
 	var observations []Observation
 
 	lines := strings.Split(string(data), "\n")
@@ -44,7 +44,7 @@ func ParseRPCStats(data []byte, source string, component string, target string) 
 			continue
 		}
 
-		obs, err := parseRPCLine(line, source, component, target, section)
+		obs, err := parseRPCLine(line, source, component, target, rpcType, section)
 		if err != nil {
 			continue // skip malformed lines
 		}
@@ -55,7 +55,7 @@ func ParseRPCStats(data []byte, source string, component string, target string) 
 }
 
 // parseRPCLine parses a data line like "1:  10  50  50  20  40  40"
-func parseRPCLine(line, source, component, target, section string) ([]Observation, error) {
+func parseRPCLine(line, source, component, target, rpcType, section string) ([]Observation, error) {
 	fields := strings.Fields(line)
 	if len(fields) < 7 {
 		return nil, fmt.Errorf("expected at least 7 fields, got %d", len(fields))
@@ -97,7 +97,7 @@ func parseRPCLine(line, source, component, target, section string) ([]Observatio
 		}
 
 		if section == "rpcs_in_flight" {
-			labels["type"] = component
+			labels["type"] = rpcType
 		}
 
 		mt := Counter

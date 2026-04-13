@@ -6,6 +6,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	"github.com/yuuki/lustre_exporter/internal/discovery"
 	"github.com/yuuki/lustre_exporter/internal/reader"
 )
@@ -101,9 +103,9 @@ func TestClientCollector_RPCStatsWithoutStatsFile(t *testing.T) {
 	r.Globs["/proc/fs/lustre/mdc/*/stats"] = nil
 	r.Globs["/proc/fs/lustre/osc/*/stats"] = nil
 	r.Globs["/proc/fs/lustre/osc/*/rpc_stats"] = []string{
-		"/proc/fs/lustre/osc/lfs-dn-h-OST0000-osc-ff36f2b293cbd800/rpc_stats",
+		"/proc/fs/lustre/osc/nonexistent-OST9999-osc-0000000000000000/rpc_stats",
 	}
-	loadFixture(t, r, "/proc/fs/lustre/osc/lfs-dn-h-OST0000-osc-ff36f2b293cbd800/rpc_stats", "../testdata/osc/rpc_stats.txt")
+	loadFixture(t, r, "/proc/fs/lustre/osc/nonexistent-OST9999-osc-0000000000000000/rpc_stats", "../testdata/osc/rpc_stats.txt")
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	c := NewClientCollector(r, discovery.DefaultPathConfig(), logger)
@@ -115,4 +117,94 @@ func TestClientCollector_RPCStatsWithoutStatsFile(t *testing.T) {
 	if len(metrics) == 0 {
 		t.Fatal("expected rpc_stats metrics, got none")
 	}
+}
+
+func TestClientCollector_RPCStatsGSICompatibleLabels(t *testing.T) {
+	const target = "nonexistent-OST9999-osc-0000000000000000"
+	r := reader.NewFakeReader()
+	r.Globs["/proc/fs/lustre/osc/*/rpc_stats"] = []string{
+		"/proc/fs/lustre/osc/" + target + "/rpc_stats",
+	}
+	r.Files["/proc/fs/lustre/osc/"+target+"/rpc_stats"] = []byte(`
+snapshot_time:         1681000000.123456789 (secs.nsecs)
+
+                        read            write
+pages per rpc         rpcs   % cum %   rpcs   % cum %
+1:                   147535   0   0       0   0   0
+
+                        read            write
+rpcs in flight        rpcs   % cum %   rpcs   % cum %
+7:                       71   0   0       0   0   0
+
+                        read            write
+offset                pages  % cum %  pages  % cum %
+0:                        0   0   0  158290   0   0
+`)
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	c := NewClientCollector(r, discovery.DefaultPathConfig(), logger)
+	metrics, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertMetric(t, metrics, "lustre_pages_per_rpc_total", map[string]string{
+		"component": "client",
+		"operation": "read",
+		"size":      "1",
+		"target":    target,
+	}, 147535)
+	assertMetric(t, metrics, "lustre_rpcs_in_flight", map[string]string{
+		"component": "client",
+		"operation": "read",
+		"size":      "7",
+		"target":    target,
+		"type":      "osc",
+	}, 71)
+	assertMetric(t, metrics, "lustre_rpcs_offset", map[string]string{
+		"component": "client",
+		"operation": "write",
+		"size":      "0",
+		"target":    target,
+	}, 158290)
+}
+
+func assertMetric(t *testing.T, metrics []prometheus.Metric, name string, labels map[string]string, value float64) {
+	t.Helper()
+	for _, metric := range metrics {
+		if extractMetricName(metric.Desc().String()) != name {
+			continue
+		}
+		var dm dto.Metric
+		if err := metric.Write(&dm); err != nil {
+			t.Fatal(err)
+		}
+		if !labelsMatch(dm.GetLabel(), labels) {
+			continue
+		}
+		switch {
+		case dm.GetCounter() != nil:
+			if dm.GetCounter().GetValue() == value {
+				return
+			}
+		case dm.GetGauge() != nil:
+			if dm.GetGauge().GetValue() == value {
+				return
+			}
+		}
+		t.Fatalf("%s labels %v has wrong value: %v", name, labels, dm)
+	}
+	t.Fatalf("metric %s with labels %v not found", name, labels)
+}
+
+func labelsMatch(got []*dto.LabelPair, want map[string]string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for _, label := range got {
+		if want[label.GetName()] != label.GetValue() {
+			return false
+		}
+	}
+	return true
 }

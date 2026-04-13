@@ -11,7 +11,7 @@ func TestParseRPCStats_MDC(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	obs, err := ParseRPCStats(data, "test", "mdc", "scratch-MDT0000-mdc-ffff0001")
+	obs, err := ParseRPCStats(data, "test", "mdc", "scratch-MDT0000-mdc-ffff0001", "mdc")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestParseRPCStats_OSC(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	obs, err := ParseRPCStats(data, "test", "osc", "scratch-OST0000-osc-ffff0001")
+	obs, err := ParseRPCStats(data, "test", "osc", "scratch-OST0000-osc-ffff0001", "osc")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func TestParseRPCStats_OSC(t *testing.T) {
 }
 
 func TestParseRPCStats_Empty(t *testing.T) {
-	obs, err := ParseRPCStats([]byte(""), "test", "osc", "target")
+	obs, err := ParseRPCStats([]byte(""), "test", "osc", "target", "osc")
 	if err != nil {
 		t.Fatal(err)
 	}
