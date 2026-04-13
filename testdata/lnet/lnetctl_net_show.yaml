@@ -1,0 +1,17 @@
+net:
+    - net type: lo
+      local NI(s):
+        - nid: 0@lo
+          status: up
+          statistics:
+              send_count: 180076
+              recv_count: 180072
+              drop_count: 4
+    - net type: tcp
+      local NI(s):
+        - nid: 172.16.0.24@tcp
+          status: up
+          statistics:
+              send_count: 464970
+              recv_count: 464963
+              drop_count: 4

@@ -212,8 +212,10 @@ data is available:
 - `lustre_catastrophe_enabled`
 - `lustre_lnet_memory_used_bytes`
 
-The `auto` LNet source mode should prefer debugfs for compatibility and use
-`lnetctl` only where it gives structured data that fills gaps safely.
+The `auto` LNet source mode should prefer debugfs for compatibility, fall back
+to legacy `/proc/sys/lnet` paths when needed, and use `lnetctl` where it gives
+structured data that fills gaps safely. When `lnetctl net show` is available,
+send, receive, and drop counters may include a `nid` label.
 
 ### Explicitly Excluded Metrics
 

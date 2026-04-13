@@ -59,3 +59,17 @@ func (r *FSReader) RunCommand(ctx context.Context, name string, args ...string) 
 	cmd := exec.CommandContext(ctx, name, args...)
 	return cmd.Output()
 }
+
+// ReadFirstAvailable tries each path in order, returning data from the first successful read.
+func ReadFirstAvailable(r Reader, paths []string) ([]byte, string, error) {
+	var lastErr error
+	for _, p := range paths {
+		data, err := r.ReadFile(p)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		return data, p, nil
+	}
+	return nil, "", lastErr
+}

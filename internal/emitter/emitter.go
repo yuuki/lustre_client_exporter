@@ -1,6 +1,7 @@
 package emitter
 
 import (
+	"strings"
 	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -10,17 +11,25 @@ import (
 
 var (
 	descCache   = map[string]*prometheus.Desc{}
-	descCacheMu sync.Mutex
+	descCacheMu sync.RWMutex
 )
 
 func getDesc(def mapper.MetricDef) *prometheus.Desc {
+	key := def.Name + "\xff" + strings.Join(def.LabelKeys, "\xff")
+	descCacheMu.RLock()
+	if d, ok := descCache[key]; ok {
+		descCacheMu.RUnlock()
+		return d
+	}
+	descCacheMu.RUnlock()
+
 	descCacheMu.Lock()
 	defer descCacheMu.Unlock()
-	if d, ok := descCache[def.Name]; ok {
+	if d, ok := descCache[key]; ok {
 		return d
 	}
 	d := prometheus.NewDesc(def.Name, def.Help, def.LabelKeys, nil)
-	descCache[def.Name] = d
+	descCache[key] = d
 	return d
 }
 

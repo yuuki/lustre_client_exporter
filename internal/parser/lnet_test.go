@@ -21,17 +21,17 @@ func TestParseLNetStats(t *testing.T) {
 	}
 
 	expected := map[string]float64{
-		"allocated":          0,
-		"maximum":            32,
-		"errors_total":       0,
-		"send_count_total":   512,
+		"allocated":           0,
+		"maximum":             32,
+		"errors_total":        0,
+		"send_count_total":    512,
 		"receive_count_total": 256,
-		"route_count_total":  64,
-		"drop_count_total":   128,
-		"send_bytes_total":   1048576,
+		"route_count_total":   64,
+		"drop_count_total":    128,
+		"send_bytes_total":    1048576,
 		"receive_bytes_total": 524288,
-		"route_bytes_total":  65536,
-		"drop_bytes_total":   131072,
+		"route_bytes_total":   65536,
+		"drop_bytes_total":    131072,
 	}
 
 	for _, o := range obs {
@@ -91,6 +91,65 @@ func TestParseLNetCtlStats(t *testing.T) {
 	}
 }
 
+func TestParseLNetCtlStats_YAML(t *testing.T) {
+	data, err := os.ReadFile("../../testdata/lnet/lnetctl_stats.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	obs, err := ParseLNetCtlStats(data, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(obs) != 11 {
+		t.Fatalf("got %d observations, want 11", len(obs))
+	}
+
+	found := map[string]float64{}
+	for _, o := range obs {
+		found[o.MetricID] = o.Value
+	}
+
+	if found["send_count_total"] != 512 {
+		t.Errorf("send_count_total = %f, want 512", found["send_count_total"])
+	}
+	if found["drop_bytes_total"] != 131072 {
+		t.Errorf("drop_bytes_total = %f, want 131072", found["drop_bytes_total"])
+	}
+}
+
+func TestParseLNetCtlNetStats_YAML(t *testing.T) {
+	data, err := os.ReadFile("../../testdata/lnet/lnetctl_net_show.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	obs, err := ParseLNetCtlNetStats(data, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(obs) != 6 {
+		t.Fatalf("got %d observations, want 6", len(obs))
+	}
+
+	found := map[string]float64{}
+	for _, o := range obs {
+		found[o.MetricID+"/"+o.Labels["nid"]] = o.Value
+	}
+
+	if found["send_count_by_nid_total/0@lo"] != 180076 {
+		t.Errorf("send_count_by_nid_total/0@lo = %f, want 180076", found["send_count_by_nid_total/0@lo"])
+	}
+	if found["receive_count_by_nid_total/172.16.0.24@tcp"] != 464963 {
+		t.Errorf("receive_count_by_nid_total/172.16.0.24@tcp = %f, want 464963", found["receive_count_by_nid_total/172.16.0.24@tcp"])
+	}
+	if found["drop_count_by_nid_total/172.16.0.24@tcp"] != 4 {
+		t.Errorf("drop_count_by_nid_total/172.16.0.24@tcp = %f, want 4", found["drop_count_by_nid_total/172.16.0.24@tcp"])
+	}
+}
+
 func TestParseLNetParam(t *testing.T) {
 	tests := []struct {
 		param    string
@@ -102,6 +161,7 @@ func TestParseLNetParam(t *testing.T) {
 		{"debug_mb", "64\n", "debug_megabytes", 64},
 		{"catastrophe", "0\n", "catastrophe_enabled", 0},
 		{"lnet_memused", "4194304\n", "lnet_memory_used_bytes", 4194304},
+		{"fail_val", "7\n", "fail_maximum", 7},
 	}
 
 	for _, tt := range tests {

@@ -38,30 +38,72 @@ func SptlrpcPath(cfg PathConfig) string {
 	return filepath.Join(cfg.DebugFS, "lustre", "sptlrpc", "encrypt_page_pools")
 }
 
+// SptlrpcPaths returns known locations for the sptlrpc encrypt_page_pools file.
+func SptlrpcPaths(cfg PathConfig) []string {
+	return []string{
+		SptlrpcPath(cfg),
+		filepath.Join(cfg.ProcFS, "fs", "lustre", "sptlrpc", "encrypt_page_pools"),
+	}
+}
+
 // LNetSource represents the source to use for LNet stats.
 type LNetSource int
 
 const (
-	LNetSourceAuto    LNetSource = iota
+	LNetSourceAuto LNetSource = iota
 	LNetSourceDebugFS
 	LNetSourceLNetCtl
 )
 
-// LNetStatsPath returns the path to the LNet stats file.
+// LNetStatsPath returns the legacy procfs path to the LNet stats file.
 func LNetStatsPath(cfg PathConfig) string {
 	return filepath.Join(cfg.ProcFS, "sys", "lnet", "stats")
+}
+
+// LNetDebugFSStatsPath returns the debugfs path to the LNet stats file.
+func LNetDebugFSStatsPath(cfg PathConfig) string {
+	return filepath.Join(cfg.DebugFS, "lnet", "stats")
+}
+
+// LNetStatsPaths returns LNet stats paths in preferred order.
+func LNetStatsPaths(cfg PathConfig) []string {
+	return []string{
+		LNetDebugFSStatsPath(cfg),
+		LNetStatsPath(cfg),
+	}
 }
 
 // LNetParamNames lists all known LNet parameter file names.
 var LNetParamNames = []string{
 	"console_backoff", "console_max_delay_centisecs", "console_min_delay_centisecs",
 	"console_ratelimit", "debug_mb", "panic_on_lbug", "watchdog_ratelimit",
-	"catastrophe", "lnet_memused", "fail_err", "fail_max",
+	"catastrophe", "lnet_memused", "fail_err", "fail_val",
 }
 
 // LNetParamPath returns the path for a specific LNet parameter.
 func LNetParamPath(cfg PathConfig, paramName string) string {
 	return filepath.Join(cfg.ProcFS, "sys", "lnet", paramName)
+}
+
+// LNetDebugFSParamPath returns the debugfs path for a specific LNet parameter.
+func LNetDebugFSParamPath(cfg PathConfig, paramName string) string {
+	return filepath.Join(cfg.DebugFS, "lnet", paramName)
+}
+
+// LNetParamPaths returns LNet parameter paths in preferred order.
+func LNetParamPaths(cfg PathConfig, paramName string) []string {
+	if paramName == "fail_val" {
+		return []string{
+			LNetDebugFSParamPath(cfg, "fail_val"),
+			LNetParamPath(cfg, "fail_val"),
+			LNetDebugFSParamPath(cfg, "fail_max"),
+			LNetParamPath(cfg, "fail_max"),
+		}
+	}
+	return []string{
+		LNetDebugFSParamPath(cfg, paramName),
+		LNetParamPath(cfg, paramName),
+	}
 }
 
 // ClientTarget represents a discovered llite, mdc, or osc target.

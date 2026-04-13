@@ -133,6 +133,24 @@ var Registry = map[string]MetricDef{
 		Help: "Total number of LNet messages dropped.",
 		Type: parser.Counter,
 	},
+	"send_count_by_nid_total": {
+		Name:      "lustre_send_count_total",
+		Help:      "Total number of LNet messages sent.",
+		Type:      parser.Counter,
+		LabelKeys: []string{"nid"},
+	},
+	"receive_count_by_nid_total": {
+		Name:      "lustre_receive_count_total",
+		Help:      "Total number of LNet messages received.",
+		Type:      parser.Counter,
+		LabelKeys: []string{"nid"},
+	},
+	"drop_count_by_nid_total": {
+		Name:      "lustre_drop_count_total",
+		Help:      "Total number of LNet messages dropped.",
+		Type:      parser.Counter,
+		LabelKeys: []string{"nid"},
+	},
 	"send_bytes_total": {
 		Name: "lustre_send_bytes_total",
 		Help: "Total bytes sent via LNet.",

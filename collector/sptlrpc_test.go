@@ -57,3 +57,23 @@ func TestSptlrpcCollector_MissingFile(t *testing.T) {
 		t.Fatal("expected error for missing encrypt_page_pools")
 	}
 }
+
+func TestSptlrpcCollector_ProcFSFallback(t *testing.T) {
+	data, err := os.ReadFile("../testdata/sptlrpc/encrypt_page_pools.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r := reader.NewFakeReader()
+	r.Files["/proc/fs/lustre/sptlrpc/encrypt_page_pools"] = data
+
+	c := NewSptlrpcCollector(r, discovery.DefaultPathConfig())
+	metrics, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(metrics) != 15 {
+		t.Fatalf("got %d metrics, want 15", len(metrics))
+	}
+}

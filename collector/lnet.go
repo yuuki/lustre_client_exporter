@@ -71,8 +71,7 @@ func (c *LNetCollector) Collect(ctx context.Context) ([]prometheus.Metric, error
 }
 
 func (c *LNetCollector) collectFromDebugFS() ([]parser.Observation, error) {
-	path := discovery.LNetStatsPath(c.pathCfg)
-	data, err := c.reader.ReadFile(path)
+	data, path, err := reader.ReadFirstAvailable(c.reader, discovery.LNetStatsPaths(c.pathCfg))
 	if err != nil {
 		return nil, err
 	}
@@ -84,14 +83,47 @@ func (c *LNetCollector) collectFromLNetCtl(ctx context.Context) ([]parser.Observ
 	if err != nil {
 		return nil, err
 	}
-	return parser.ParseLNetCtlStats(data, "lnetctl stats show")
+	obs, err := parser.ParseLNetCtlStats(data, "lnetctl stats show")
+	if err != nil {
+		return nil, err
+	}
+
+	netData, err := c.reader.RunCommand(ctx, c.lnetctlBin, "net", "show")
+	if err != nil {
+		c.logger.Debug("lnetctl net show not available", "error", err)
+		return obs, nil
+	}
+	netObs, err := parser.ParseLNetCtlNetStats(netData, "lnetctl net show")
+	if err != nil {
+		c.logger.Warn("failed to parse lnetctl net show", "error", err)
+		return obs, nil
+	}
+	if len(netObs) == 0 {
+		return obs, nil
+	}
+
+	obs = dropGlobalLNetCountStats(obs)
+	return append(obs, netObs...), nil
+}
+
+func dropGlobalLNetCountStats(obs []parser.Observation) []parser.Observation {
+	filtered := obs[:0]
+	for _, o := range obs {
+		if len(o.Labels) == 0 {
+			switch o.MetricID {
+			case "send_count_total", "receive_count_total", "drop_count_total":
+				continue
+			}
+		}
+		filtered = append(filtered, o)
+	}
+	return filtered
 }
 
 func (c *LNetCollector) collectParams() []parser.Observation {
 	var allObs []parser.Observation
 	for _, paramName := range discovery.LNetParamNames {
-		path := discovery.LNetParamPath(c.pathCfg, paramName)
-		data, err := c.reader.ReadFile(path)
+		data, path, err := reader.ReadFirstAvailable(c.reader, discovery.LNetParamPaths(c.pathCfg, paramName))
 		if err != nil {
 			continue
 		}

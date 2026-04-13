@@ -1,7 +1,7 @@
 .PHONY: build test vet clean
 
 build:
-	go build ./...
+	go build -o lustre_client_exporter ./cmd/lustre_client_exporter/
 
 test:
 	go test ./...

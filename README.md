@@ -50,11 +50,11 @@ Reads client filesystem stats, capacity, tunables, and RPC statistics from `/pro
 
 ### SPTLRPC
 
-Reads `/sys/kernel/debug/lustre/sptlrpc/encrypt_page_pools` for encryption page pool metrics.
+Reads `sptlrpc/encrypt_page_pools` from debugfs, falling back to `/proc/fs/lustre/sptlrpc/encrypt_page_pools`, for encryption page pool metrics.
 
 ### LNet
 
-Reads `/proc/sys/lnet/stats` and individual parameter files, or uses `lnetctl stats show` as an alternative source.
+Reads debugfs LNet stats and parameter files, falling back to `/proc/sys/lnet/*` where available. The `lnetctl` source reads `lnetctl stats show` and also uses `lnetctl net show` for per-NID send, receive, and drop counters when available.
 
 ## Development
 
