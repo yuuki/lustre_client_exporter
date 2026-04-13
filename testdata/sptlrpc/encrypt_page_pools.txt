@@ -1,0 +1,15 @@
+physical pages:          262144
+pages per pool:          256
+max pages:               65536
+max pools:               256
+pages in pools:          1024
+free pages:              512
+max pages reached:       2048
+grows:                   10
+grows failure:           1
+shrinks:                 5
+cache access:            50000
+cache miss:              100
+free page low:           0
+max waitqueue depth:     3
+out of mem:              0

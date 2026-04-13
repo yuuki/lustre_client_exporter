@@ -1,0 +1,15 @@
+{
+    "statistics": {
+        "msgs_alloc": 0,
+        "msgs_max": 32,
+        "errors": 0,
+        "send_count": 512,
+        "recv_count": 256,
+        "route_count": 64,
+        "drop_count": 128,
+        "send_length": 1048576,
+        "recv_length": 524288,
+        "route_length": 65536,
+        "drop_length": 131072
+    }
+}

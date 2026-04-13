@@ -1,0 +1,6 @@
+snapshot_time             1681000000.123456789 secs.nsecs
+req_waittime              100 samples [usec] 10 5000 250000
+req_active                100 samples [reqs] 1 8 400
+mds_getattr               500 samples [usec] 5 2000 100000
+mds_close                 300 samples [usec] 10 3000 150000
+ldlm_cancel               50 samples [usec] 5 1000 25000

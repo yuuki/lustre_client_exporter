@@ -1,0 +1,70 @@
+package parser
+
+import (
+	"os"
+	"testing"
+)
+
+func TestParseRPCStats_MDC(t *testing.T) {
+	data, err := os.ReadFile("../../testdata/mdc/rpc_stats.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	obs, err := ParseRPCStats(data, "test", "mdc", "scratch-MDT0000-mdc-ffff0001")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 3 sections * 4 rows * 2 (read+write) = 24
+	if len(obs) != 24 {
+		t.Fatalf("got %d observations, want 24", len(obs))
+	}
+
+	// Check that components and targets are set
+	for _, o := range obs {
+		if o.Labels["component"] != "mdc" {
+			t.Errorf("component = %q, want mdc", o.Labels["component"])
+		}
+		if o.Labels["target"] != "scratch-MDT0000-mdc-ffff0001" {
+			t.Errorf("target = %q", o.Labels["target"])
+		}
+	}
+
+	// Check rpcs_in_flight has type label
+	for _, o := range obs {
+		if o.MetricID == "rpcs_in_flight" {
+			if o.Labels["type"] != "mdc" {
+				t.Errorf("rpcs_in_flight type = %q, want mdc", o.Labels["type"])
+			}
+		}
+	}
+}
+
+func TestParseRPCStats_OSC(t *testing.T) {
+	data, err := os.ReadFile("../../testdata/osc/rpc_stats.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	obs, err := ParseRPCStats(data, "test", "osc", "scratch-OST0000-osc-ffff0001")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 3 sections * 5 rows * 2 = 30
+	// Actually: pages_per_rpc (5 rows * 2) + rpcs_in_flight (4 rows * 2) + offset (4 rows * 2) = 10 + 8 + 8 = 26
+	if len(obs) != 26 {
+		t.Fatalf("got %d observations, want 26", len(obs))
+	}
+}
+
+func TestParseRPCStats_Empty(t *testing.T) {
+	obs, err := ParseRPCStats([]byte(""), "test", "osc", "target")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(obs) != 0 {
+		t.Errorf("got %d for empty, want 0", len(obs))
+	}
+}

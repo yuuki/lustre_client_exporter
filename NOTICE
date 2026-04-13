@@ -1,0 +1,6 @@
+Lustre Client Exporter
+Copyright 2026 Yuuki TSUBOUCHI
+
+This project emits selected metric names and labels compatible with
+GSI-HPC/lustre_exporter for operational continuity. It does not include
+GSI-HPC/lustre_exporter source code, fixtures, dashboards, or documentation.

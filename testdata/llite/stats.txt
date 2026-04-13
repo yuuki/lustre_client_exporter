@@ -1,0 +1,10 @@
+snapshot_time             1681000000.123456789 secs.nsecs
+read_bytes                500 samples [bytes] 0 1048576 524288000
+write_bytes               200 samples [bytes] 0 524288 104857600
+ioctl                     15 samples [reqs]
+open                      1024 samples [reqs]
+close                     1020 samples [reqs]
+getattr                   5000 samples [reqs]
+setattr                   50 samples [reqs]
+statfs                    100 samples [reqs]
+inode_permission          8000 samples [reqs]

@@ -1,0 +1,23 @@
+snapshot_time:         1681000000.123456789 (secs.nsecs)
+
+                        read            write
+pages per rpc         rpcs   % cum %   rpcs   % cum %
+1:                       50  25  25      40  20  20
+2:                       30  15  40      30  15  35
+4:                       20  10  50      20  10  45
+8:                       10   5  55      10   5  50
+16:                      90  45 100     100  50 100
+
+                        read            write
+rpcs in flight        rpcs   % cum %   rpcs   % cum %
+1:                       40  20  20      50  25  25
+2:                       60  30  50      50  25  50
+4:                       60  30  80      60  30  80
+8:                       40  20 100      40  20 100
+
+                        read            write
+offset                pages  % cum %  pages  % cum %
+0:                       50  25  25      40  20  20
+1:                       50  25  50      60  30  50
+2:                       50  25  75      50  25  75
+4:                       50  25 100      50  25 100
