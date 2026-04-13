@@ -375,13 +375,13 @@ var Registry = map[string]MetricDef{
 	"rpcs_in_flight": {
 		Name:      "lustre_rpcs_in_flight",
 		Help:      "RPCs in flight by bucket.",
-		Type:      parser.Counter,
+		Type:      parser.Gauge,
 		LabelKeys: []string{"component", "target", "operation", "size", "type"},
 	},
 	"rpcs_offset": {
 		Name:      "lustre_rpcs_offset",
 		Help:      "RPC offset distribution by bucket.",
-		Type:      parser.Counter,
+		Type:      parser.Gauge,
 		LabelKeys: []string{"component", "target", "operation", "size"},
 	},
 }

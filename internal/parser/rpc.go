@@ -100,11 +100,16 @@ func parseRPCLine(line, source, component, target, section string) ([]Observatio
 			labels["type"] = component
 		}
 
+		mt := Counter
+		if section == "rpcs_in_flight" || section == "rpcs_offset" {
+			mt = Gauge
+		}
+
 		observations = append(observations, Observation{
 			Collector:  "client",
 			Source:     source,
 			MetricID:   metricID,
-			MetricType: Counter,
+			MetricType: mt,
 			Labels:     labels,
 			Value:      op.value,
 		})
