@@ -29,6 +29,7 @@ type Config struct {
 	CollectorLNet    bool
 	CollectorHealth  bool
 	CollectorSptlrpc bool
+	CollectorLpcc    bool
 
 	// Tuning
 	LNetSource    string
@@ -42,6 +43,7 @@ type Config struct {
 	SysFS   string
 	DebugFS string
 	LNetCtl string
+	LpccBin string
 
 	// Logging
 	LogLevel string
@@ -61,6 +63,7 @@ func parseFlags() *Config {
 	flag.BoolVar(&cfg.CollectorLNet, "collector.lnet", true, "Enable the LNet collector.")
 	flag.BoolVar(&cfg.CollectorHealth, "collector.health", true, "Enable the health collector.")
 	flag.BoolVar(&cfg.CollectorSptlrpc, "collector.sptlrpc", true, "Enable the sptlrpc collector.")
+	flag.BoolVar(&cfg.CollectorLpcc, "collector.lpcc", false, "Enable the LPCC (Lustre PCC) collector.")
 
 	flag.StringVar(&cfg.LNetSource, "collector.lnet.source", "auto", "LNet data source: auto, debugfs, or lnetctl.")
 	flag.DurationVar(&cfg.ScrapeTimeout, "collector.scrape-timeout", 30*time.Second, "Maximum duration of a scrape.")
@@ -72,6 +75,7 @@ func parseFlags() *Config {
 	flag.StringVar(&cfg.SysFS, "path.sysfs", "/sys", "sysfs mount point.")
 	flag.StringVar(&cfg.DebugFS, "path.debugfs", "/sys/kernel/debug", "debugfs mount point.")
 	flag.StringVar(&cfg.LNetCtl, "path.lnetctl", "lnetctl", "Path to the lnetctl binary.")
+	flag.StringVar(&cfg.LpccBin, "path.lpcc", "lpcc", "Path to the lpcc binary.")
 
 	flag.StringVar(&cfg.LogLevel, "log.level", "info", "Log level: debug, info, warn, error.")
 
@@ -133,6 +137,9 @@ func run() int {
 	}
 	if cfg.CollectorClient {
 		collectors = append(collectors, collector.NewClientCollector(r, pathCfg, logger))
+	}
+	if cfg.CollectorLpcc {
+		collectors = append(collectors, collector.NewLpccCollector(r, cfg.LpccBin, logger))
 	}
 
 	reg := prometheus.NewRegistry()

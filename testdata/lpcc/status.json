@@ -1,0 +1,134 @@
+{
+    "/disk/dn-h": {
+        "pcc": [
+            {
+                "mount": "/disk/dn-h",
+                "cache": "/nvme67/dn-h-lpcc",
+                "status": "running",
+                "roid": 2,
+                "autocache": "projid={906}",
+                "purge": "running",
+                "purge_stats": {
+                    "version": "2.89-1",
+                    "revison": "None",
+                    "snapshot_time_secs": 1776146364,
+                    "fsname": "lfs-dn-h",
+                    "cache_usage_pct": 0.8523850759891535,
+                    "config": {
+                        "mount": "/disk/dn-h",
+                        "cache": "/nvme67/dn-h-lpcc",
+                        "rwid": 2,
+                        "high_usage": 80.0,
+                        "low_usage": 70.0,
+                        "interval": 30,
+                        "scan_threads": 1,
+                        "candidate_num": 131072,
+                        "clear_hashdir": false,
+                        "max_scan_secs": 30,
+                        "log_level": "info",
+                        "force_scan_interval": 1800
+                    },
+                    "stats": {
+                        "scan_times": 46,
+                        "total_purged_objs": 0,
+                        "total_failed_objs": 0,
+                        "start_time_secs": 1776145469,
+                        "start_time": "Tue Apr 14 14:44:29 2026",
+                        "start_usage_pct": 0.8523848626381166,
+                        "end_time_secs": 1776145469,
+                        "end_time": "Tue Apr 14 14:44:29 2026",
+                        "scanned_objs": 1318,
+                        "purged_objs": 0
+                    },
+                    "cache_stats": {
+                        "last_scan_time_secs": 1776145469,
+                        "last_scan_time": "Tue Apr 14 14:44:29 2026",
+                        "cached_files": 1318,
+                        "cached_bytes": 17608566156,
+                        "min_cached_file_size": 206,
+                        "max_cached_file_size": 17606000640,
+                        "min_cached_file_atime_secs": 1776063977,
+                        "min_cached_file_atime": "Mon Apr 13 16:06:17 2026",
+                        "max_cached_file_atime_secs": 1776145455,
+                        "max_cached_file_atime": "Tue Apr 14 14:44:15 2026",
+                        "average_age_secs": 40853
+                    }
+                }
+            }
+        ],
+        "fs_stats": {
+            "open_count": 260373591,
+            "pcc_real_hit": 3544,
+            "pcc_open_hit_pct": 0.0013611211438106256,
+            "pcc_real_hit_bytes": 15282016116596,
+            "total_read_bytes": 507704264444926,
+            "pcc_read_hit_bytes_pct": 3.0100231939757007
+        }
+    },
+    "/disk/dn-k": {
+        "pcc": [
+            {
+                "mount": "/disk/dn-k",
+                "cache": "/nvme68/dn-k-lpcc",
+                "status": "running",
+                "roid": 3,
+                "autocache": "projid={907}",
+                "purge": "stopped",
+                "purge_stats": {
+                    "version": "2.89-1",
+                    "revison": "None",
+                    "snapshot_time_secs": 1776146000,
+                    "fsname": "lfs-dn-k",
+                    "cache_usage_pct": 45.123,
+                    "config": {
+                        "mount": "/disk/dn-k",
+                        "cache": "/nvme68/dn-k-lpcc",
+                        "rwid": 3,
+                        "high_usage": 85.0,
+                        "low_usage": 75.0,
+                        "interval": 60,
+                        "scan_threads": 2,
+                        "candidate_num": 65536,
+                        "clear_hashdir": false,
+                        "max_scan_secs": 60,
+                        "log_level": "info",
+                        "force_scan_interval": 3600
+                    },
+                    "stats": {
+                        "scan_times": 100,
+                        "total_purged_objs": 500,
+                        "total_failed_objs": 3,
+                        "start_time_secs": 1776145000,
+                        "start_time": "Tue Apr 14 14:36:40 2026",
+                        "start_usage_pct": 50.0,
+                        "end_time_secs": 1776145100,
+                        "end_time": "Tue Apr 14 14:38:20 2026",
+                        "scanned_objs": 5000,
+                        "purged_objs": 200
+                    },
+                    "cache_stats": {
+                        "last_scan_time_secs": 1776145100,
+                        "last_scan_time": "Tue Apr 14 14:38:20 2026",
+                        "cached_files": 9999,
+                        "cached_bytes": 50000000000,
+                        "min_cached_file_size": 100,
+                        "max_cached_file_size": 10000000000,
+                        "min_cached_file_atime_secs": 1776000000,
+                        "min_cached_file_atime": "Mon Apr 13 00:00:00 2026",
+                        "max_cached_file_atime_secs": 1776145000,
+                        "max_cached_file_atime": "Tue Apr 14 14:36:40 2026",
+                        "average_age_secs": 72500
+                    }
+                }
+            }
+        ],
+        "fs_stats": {
+            "open_count": 100000000,
+            "pcc_real_hit": 10000,
+            "pcc_open_hit_pct": 0.01,
+            "pcc_real_hit_bytes": 5000000000000,
+            "total_read_bytes": 100000000000000,
+            "pcc_read_hit_bytes_pct": 5.0
+        }
+    }
+}

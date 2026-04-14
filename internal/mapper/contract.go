@@ -402,4 +402,146 @@ var Registry = map[string]MetricDef{
 		Type:      parser.Gauge,
 		LabelKeys: []string{"component", "target", "operation", "size"},
 	},
+
+	// LPCC (Lustre PCC) per-cache metrics
+	"pcc_status": {
+		Name:      "lustre_pcc_status",
+		Help:      "PCC cache status (1 = running, 0 = not running).",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"mount", "cache"},
+	},
+	"pcc_purge_status": {
+		Name:      "lustre_pcc_purge_status",
+		Help:      "PCC purge process status (1 = running, 0 = not running).",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"mount", "cache"},
+	},
+	"pcc_cache_usage_ratio": {
+		Name:      "lustre_pcc_cache_usage_ratio",
+		Help:      "Current PCC cache usage as a ratio (0.0–1.0).",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"mount", "cache"},
+	},
+	"pcc_purge_high_usage_ratio": {
+		Name:      "lustre_pcc_purge_high_usage_ratio",
+		Help:      "High watermark for purge trigger as a ratio (0.0–1.0).",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"mount", "cache"},
+	},
+	"pcc_purge_low_usage_ratio": {
+		Name:      "lustre_pcc_purge_low_usage_ratio",
+		Help:      "Low watermark for purge stop as a ratio (0.0–1.0).",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"mount", "cache"},
+	},
+	"pcc_purge_interval_seconds": {
+		Name:      "lustre_pcc_purge_interval_seconds",
+		Help:      "Purge scan interval in seconds.",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"mount", "cache"},
+	},
+	"pcc_purge_scan_threads": {
+		Name:      "lustre_pcc_purge_scan_threads",
+		Help:      "Number of purge scan threads.",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"mount", "cache"},
+	},
+	"pcc_purge_scan_times_total": {
+		Name:      "lustre_pcc_purge_scan_times_total",
+		Help:      "Total number of purge scans performed.",
+		Type:      parser.Counter,
+		LabelKeys: []string{"mount", "cache"},
+	},
+	"pcc_purge_total_purged_objs_total": {
+		Name:      "lustre_pcc_purge_total_purged_objs_total",
+		Help:      "Total number of objects purged from PCC cache.",
+		Type:      parser.Counter,
+		LabelKeys: []string{"mount", "cache"},
+	},
+	"pcc_purge_total_failed_objs_total": {
+		Name:      "lustre_pcc_purge_total_failed_objs_total",
+		Help:      "Total number of objects that failed to purge.",
+		Type:      parser.Counter,
+		LabelKeys: []string{"mount", "cache"},
+	},
+	"pcc_purge_scanned_objs": {
+		Name:      "lustre_pcc_purge_scanned_objs",
+		Help:      "Number of objects scanned in the last purge cycle.",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"mount", "cache"},
+	},
+	"pcc_purge_purged_objs": {
+		Name:      "lustre_pcc_purge_purged_objs",
+		Help:      "Number of objects purged in the last purge cycle.",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"mount", "cache"},
+	},
+	"pcc_cached_files": {
+		Name:      "lustre_pcc_cached_files",
+		Help:      "Number of files currently cached in PCC.",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"mount", "cache"},
+	},
+	"pcc_cached_bytes": {
+		Name:      "lustre_pcc_cached_bytes",
+		Help:      "Total bytes currently cached in PCC.",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"mount", "cache"},
+	},
+	"pcc_min_cached_file_size_bytes": {
+		Name:      "lustre_pcc_min_cached_file_size_bytes",
+		Help:      "Minimum cached file size in bytes.",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"mount", "cache"},
+	},
+	"pcc_max_cached_file_size_bytes": {
+		Name:      "lustre_pcc_max_cached_file_size_bytes",
+		Help:      "Maximum cached file size in bytes.",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"mount", "cache"},
+	},
+	"pcc_average_age_seconds": {
+		Name:      "lustre_pcc_average_age_seconds",
+		Help:      "Average age of cached files in seconds.",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"mount", "cache"},
+	},
+
+	// LPCC per-mount filesystem stats
+	"pcc_fs_open_count_total": {
+		Name:      "lustre_pcc_fs_open_count_total",
+		Help:      "Total number of file opens on the Lustre mount.",
+		Type:      parser.Counter,
+		LabelKeys: []string{"mount"},
+	},
+	"pcc_fs_real_hit_total": {
+		Name:      "lustre_pcc_fs_real_hit_total",
+		Help:      "Total number of PCC cache hits.",
+		Type:      parser.Counter,
+		LabelKeys: []string{"mount"},
+	},
+	"pcc_fs_open_hit_ratio": {
+		Name:      "lustre_pcc_fs_open_hit_ratio",
+		Help:      "PCC open hit ratio (0.0–1.0).",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"mount"},
+	},
+	"pcc_fs_real_hit_bytes_total": {
+		Name:      "lustre_pcc_fs_real_hit_bytes_total",
+		Help:      "Total bytes served from PCC cache.",
+		Type:      parser.Counter,
+		LabelKeys: []string{"mount"},
+	},
+	"pcc_fs_total_read_bytes_total": {
+		Name:      "lustre_pcc_fs_total_read_bytes_total",
+		Help:      "Total bytes read from the Lustre mount.",
+		Type:      parser.Counter,
+		LabelKeys: []string{"mount"},
+	},
+	"pcc_fs_read_hit_bytes_ratio": {
+		Name:      "lustre_pcc_fs_read_hit_bytes_ratio",
+		Help:      "PCC read hit bytes ratio (0.0–1.0).",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"mount"},
+	},
 }

@@ -16,6 +16,7 @@ func TestParseFlags_Defaults(t *testing.T) {
 	flag.BoolVar(&cfg.CollectorLNet, "collector.lnet", true, "")
 	flag.BoolVar(&cfg.CollectorHealth, "collector.health", true, "")
 	flag.BoolVar(&cfg.CollectorSptlrpc, "collector.sptlrpc", true, "")
+	flag.BoolVar(&cfg.CollectorLpcc, "collector.lpcc", false, "")
 	flag.BoolVar(&cfg.Strict, "collector.strict", false, "")
 	flag.StringVar(&cfg.LogLevel, "log.level", "info", "")
 
@@ -37,6 +38,9 @@ func TestParseFlags_Defaults(t *testing.T) {
 	}
 	if cfg.Strict {
 		t.Error("strict should be false by default")
+	}
+	if cfg.CollectorLpcc {
+		t.Error("collector.lpcc should be disabled by default")
 	}
 }
 
