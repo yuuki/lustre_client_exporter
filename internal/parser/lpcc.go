@@ -121,7 +121,7 @@ func ParseLpccStatus(data []byte, source string) ([]Observation, error) {
 					Source:     source,
 					MetricID:   o.id,
 					MetricType: o.typ,
-					Labels:     copyLabels(labels),
+					Labels:     labels,
 					Value:      o.val,
 				})
 			}
@@ -151,19 +151,11 @@ func ParseLpccStatus(data []byte, source string) ([]Observation, error) {
 				Source:     source,
 				MetricID:   o.id,
 				MetricType: o.typ,
-				Labels:     copyLabels(fsLabels),
+				Labels:     fsLabels,
 				Value:      o.val,
 			})
 		}
 	}
 
 	return obs, nil
-}
-
-func copyLabels(m map[string]string) map[string]string {
-	cp := make(map[string]string, len(m))
-	for k, v := range m {
-		cp[k] = v
-	}
-	return cp
 }
