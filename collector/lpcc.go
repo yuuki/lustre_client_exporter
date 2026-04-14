@@ -5,10 +5,10 @@ import (
 	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/yuuki/lustre_exporter/internal/emitter"
-	"github.com/yuuki/lustre_exporter/internal/mapper"
-	"github.com/yuuki/lustre_exporter/internal/parser"
-	"github.com/yuuki/lustre_exporter/internal/reader"
+	"github.com/yuuki/lustre_client_exporter/internal/emitter"
+	"github.com/yuuki/lustre_client_exporter/internal/mapper"
+	"github.com/yuuki/lustre_client_exporter/internal/parser"
+	"github.com/yuuki/lustre_client_exporter/internal/reader"
 )
 
 type LpccCollector struct {

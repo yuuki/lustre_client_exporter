@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	dto "github.com/prometheus/client_model/go"
-	"github.com/yuuki/lustre_exporter/internal/discovery"
-	"github.com/yuuki/lustre_exporter/internal/reader"
+	"github.com/yuuki/lustre_client_exporter/internal/discovery"
+	"github.com/yuuki/lustre_client_exporter/internal/reader"
 )
 
 // expectedMetricNames lists all metric names from the GSI-HPC compatible contract.

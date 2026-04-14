@@ -6,8 +6,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/yuuki/lustre_exporter/internal/discovery"
-	"github.com/yuuki/lustre_exporter/internal/reader"
+	"github.com/yuuki/lustre_client_exporter/internal/discovery"
+	"github.com/yuuki/lustre_client_exporter/internal/reader"
 )
 
 func TestHealthCollector_MissingFile_ReturnsError(t *testing.T) {

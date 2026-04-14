@@ -3,7 +3,7 @@ package mapper
 import (
 	"testing"
 
-	"github.com/yuuki/lustre_exporter/internal/parser"
+	"github.com/yuuki/lustre_client_exporter/internal/parser"
 )
 
 func TestMap_Health(t *testing.T) {

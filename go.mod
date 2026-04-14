@@ -1,4 +1,4 @@
-module github.com/yuuki/lustre_exporter
+module github.com/yuuki/lustre_client_exporter
 
 go 1.26.2
 

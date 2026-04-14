@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	dto "github.com/prometheus/client_model/go"
-	"github.com/yuuki/lustre_exporter/internal/reader"
+	"github.com/yuuki/lustre_client_exporter/internal/reader"
 )
 
 func newTestLpccFakeReader(t *testing.T) *reader.FakeReader {

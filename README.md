@@ -21,7 +21,7 @@ sudo install -m 0755 lustre_client_exporter /usr/local/bin/
 ### From source
 
 ```sh
-go install github.com/yuuki/lustre_exporter/cmd/lustre_client_exporter@latest
+go install github.com/yuuki/lustre_client_exporter/cmd/lustre_client_exporter@latest
 ```
 
 ## Usage

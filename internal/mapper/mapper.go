@@ -3,7 +3,7 @@ package mapper
 import (
 	"fmt"
 
-	"github.com/yuuki/lustre_exporter/internal/parser"
+	"github.com/yuuki/lustre_client_exporter/internal/parser"
 )
 
 // MappedObservation is an observation enriched with the public metric definition.

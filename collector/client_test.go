@@ -10,8 +10,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
-	"github.com/yuuki/lustre_exporter/internal/discovery"
-	"github.com/yuuki/lustre_exporter/internal/reader"
+	"github.com/yuuki/lustre_client_exporter/internal/discovery"
+	"github.com/yuuki/lustre_client_exporter/internal/reader"
 )
 
 func newTestClientFakeReader(t *testing.T) *reader.FakeReader {

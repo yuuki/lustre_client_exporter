@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	dto "github.com/prometheus/client_model/go"
-	"github.com/yuuki/lustre_exporter/internal/mapper"
-	"github.com/yuuki/lustre_exporter/internal/parser"
+	"github.com/yuuki/lustre_client_exporter/internal/mapper"
+	"github.com/yuuki/lustre_client_exporter/internal/parser"
 )
 
 func TestEmit_HealthGauge(t *testing.T) {

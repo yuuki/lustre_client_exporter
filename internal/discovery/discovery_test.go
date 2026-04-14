@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/yuuki/lustre_exporter/internal/reader"
+	"github.com/yuuki/lustre_client_exporter/internal/reader"
 )
 
 func TestDiscoverClientsDiscoversRPCStatsWithoutStatsFile(t *testing.T) {

@@ -1,6 +1,6 @@
 package mapper
 
-import "github.com/yuuki/lustre_exporter/internal/parser"
+import "github.com/yuuki/lustre_client_exporter/internal/parser"
 
 // MetricDef defines a public metric's name, help text, type, and expected labels.
 type MetricDef struct {
