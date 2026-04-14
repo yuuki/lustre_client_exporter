@@ -63,9 +63,12 @@ func TestLpccCollector_CommandNotFound(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
 	c := NewLpccCollector(r, "lpcc", logger)
-	_, err := c.Collect(context.Background())
-	if err == nil {
-		t.Fatal("expected error on command failure")
+	metrics, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatalf("expected no error on command failure, got %v", err)
+	}
+	if len(metrics) != 0 {
+		t.Fatalf("expected 0 metrics on command failure, got %d", len(metrics))
 	}
 }
 
