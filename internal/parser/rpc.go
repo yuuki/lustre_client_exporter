@@ -66,7 +66,14 @@ func parseRPCLine(line, source, component, target, rpcType, section string) ([]O
 	if err != nil {
 		return nil, err
 	}
-	writeVal, err := strconv.ParseFloat(fields[4], 64)
+	writeIndex := 4
+	if fields[writeIndex] == "|" {
+		writeIndex++
+	}
+	if len(fields) <= writeIndex {
+		return nil, fmt.Errorf("expected write value at field %d, got %d fields", writeIndex, len(fields))
+	}
+	writeVal, err := strconv.ParseFloat(fields[writeIndex], 64)
 	if err != nil {
 		return nil, err
 	}

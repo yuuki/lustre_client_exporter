@@ -130,15 +130,15 @@ snapshot_time:         1681000000.123456789 (secs.nsecs)
 
                         read            write
 pages per rpc         rpcs   % cum %   rpcs   % cum %
-1:                   147535   0   0       0   0   0
+1:                   147535  93  93   |     148562  92  92
 
                         read            write
 rpcs in flight        rpcs   % cum %   rpcs   % cum %
-7:                       71   0   0       0   0   0
+7:                       16   0  99   |        315   0  98
 
                         read            write
-offset                pages  % cum %  pages  % cum %
-0:                        0   0   0  158290   0   0
+offset                rpcs   % cum % |       rpcs   % cum %
+0:                   153011  96  96   |     158331  99  99
 `)
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -160,13 +160,13 @@ offset                pages  % cum %  pages  % cum %
 		"size":      "7",
 		"target":    target,
 		"type":      "osc",
-	}, 71)
+	}, 16)
 	assertMetric(t, metrics, "lustre_rpcs_offset", map[string]string{
 		"component": "client",
 		"operation": "write",
 		"size":      "0",
 		"target":    target,
-	}, 158290)
+	}, 158331)
 }
 
 func assertMetric(t *testing.T, metrics []prometheus.Metric, name string, labels map[string]string, value float64) {
