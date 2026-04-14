@@ -1,9 +1,11 @@
 package collector
 
 import (
+	"bytes"
 	"context"
 	"log/slog"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -116,6 +118,71 @@ func TestClientCollector_RPCStatsWithoutStatsFile(t *testing.T) {
 
 	if len(metrics) == 0 {
 		t.Fatal("expected rpc_stats metrics, got none")
+	}
+}
+
+func TestClientCollector_MDCRPCStatsWithScalarInFlightLines(t *testing.T) {
+	const target = "lfs-dn-h-MDT0000-mdc-ff36f2b293cbd800"
+	r := reader.NewFakeReader()
+	r.Globs["/proc/fs/lustre/mdc/*/rpc_stats"] = []string{
+		"/proc/fs/lustre/mdc/" + target + "/rpc_stats",
+	}
+	r.Files["/proc/fs/lustre/mdc/"+target+"/rpc_stats"] = []byte(`
+snapshot_time:            1776181530.650669515 secs.nsecs
+modify_RPCs_in_flight:  0
+
+                        modify
+rpcs in flight        rpcs   % cum %
+0:                       0   0   0
+1:                 5268464  56  56
+
+read RPCs in flight:  0
+write RPCs in flight: 0
+pending write pages:  0
+pending read pages:   0
+
+                        read                    write
+rpcs in flight        rpcs   % cum % |       rpcs   % cum %
+1:                       0   0   0   |          0   0   0
+`)
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	c := NewClientCollector(r, discovery.DefaultPathConfig(), logger)
+	metrics, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(logs.String(), "rpc collection failed") {
+		t.Fatalf("unexpected rpc collection warning: %s", logs.String())
+	}
+
+	assertMetric(t, metrics, "lustre_rpcs_in_flight", map[string]string{
+		"component": "client",
+		"operation": "modify",
+		"size":      "1",
+		"target":    target,
+		"type":      "mdc",
+	}, 5268464)
+	assertMetric(t, metrics, "lustre_rpcs_in_flight", map[string]string{
+		"component": "client",
+		"operation": "read",
+		"size":      "1",
+		"target":    target,
+		"type":      "mdc",
+	}, 0)
+	assertMetric(t, metrics, "lustre_rpcs_in_flight", map[string]string{
+		"component": "client",
+		"operation": "write",
+		"size":      "1",
+		"target":    target,
+		"type":      "mdc",
+	}, 0)
+
+	promRegistry := prometheus.NewRegistry()
+	promRegistry.MustRegister(NewRegistry(logger, 0, 0, c))
+	if _, err := promRegistry.Gather(); err != nil {
+		t.Fatalf("unexpected prometheus gather error: %v", err)
 	}
 }
 
