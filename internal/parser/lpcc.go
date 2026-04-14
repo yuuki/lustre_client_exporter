@@ -5,8 +5,6 @@ import (
 	"fmt"
 )
 
-// lpccStatusOutput represents the top-level JSON from `lpcc status`.
-// Keys are mount paths, values are mount entries.
 type lpccStatusOutput map[string]lpccMountEntry
 
 type lpccMountEntry struct {
@@ -74,7 +72,6 @@ func runningToBool(s string) float64 {
 	return 0.0
 }
 
-// ParseLpccStatus parses JSON output from `lpcc status`.
 func ParseLpccStatus(data []byte, source string) ([]Observation, error) {
 	var output lpccStatusOutput
 	if err := json.Unmarshal(data, &output); err != nil {
@@ -86,7 +83,6 @@ func ParseLpccStatus(data []byte, source string) ([]Observation, error) {
 	obs := make([]Observation, 0, len(output)*(metricsPerCache+metricsPerMount))
 
 	for mountPath, entry := range output {
-		// Per-cache metrics
 		for _, pcc := range entry.PCC {
 			labels := map[string]string{
 				"mount": mountPath,
@@ -129,7 +125,6 @@ func ParseLpccStatus(data []byte, source string) ([]Observation, error) {
 			}
 		}
 
-		// Per-mount fs_stats
 		fsLabels := map[string]string{
 			"mount": mountPath,
 		}
