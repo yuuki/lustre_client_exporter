@@ -69,6 +69,38 @@ func TestParseRPCStats_Empty(t *testing.T) {
 	}
 }
 
+func TestParseRPCStats_RpcsInFlightReadOnlyLine(t *testing.T) {
+	data := []byte(`
+rpcs in flight        rpcs   % cum %
+0:                         0   0   0
+`)
+
+	obs, err := ParseRPCStats(data, "test", "mdc", "target", "mdc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(obs) != 1 {
+		t.Fatalf("got %d observations, want 1", len(obs))
+	}
+
+	got := obs[0]
+	if got.MetricID != "rpcs_in_flight" {
+		t.Errorf("MetricID = %q, want rpcs_in_flight", got.MetricID)
+	}
+	if got.Labels["operation"] != "read" {
+		t.Errorf("operation = %q, want read", got.Labels["operation"])
+	}
+	if got.Labels["size"] != "0" {
+		t.Errorf("size = %q, want 0", got.Labels["size"])
+	}
+	if got.Labels["type"] != "mdc" {
+		t.Errorf("type = %q, want mdc", got.Labels["type"])
+	}
+	if got.Value != 0 {
+		t.Errorf("Value = %v, want 0", got.Value)
+	}
+}
+
 func TestParseRPCStats_MalformedDataLineReturnsError(t *testing.T) {
 	data := []byte(`
 pages per rpc         rpcs   % cum %   rpcs   % cum %

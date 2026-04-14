@@ -57,8 +57,8 @@ func ParseRPCStats(data []byte, source string, component string, target string, 
 // parseRPCLine parses a data line like "1:  10  50  50  20  40  40"
 func parseRPCLine(line, source, component, target, rpcType, section string) ([]Observation, error) {
 	fields := strings.Fields(line)
-	if len(fields) < 7 {
-		return nil, fmt.Errorf("expected at least 7 fields, got %d", len(fields))
+	if len(fields) < 2 {
+		return nil, fmt.Errorf("expected at least 2 fields, got %d", len(fields))
 	}
 
 	size := strings.TrimSuffix(fields[0], ":")
@@ -67,15 +67,16 @@ func parseRPCLine(line, source, component, target, rpcType, section string) ([]O
 		return nil, err
 	}
 	writeIndex := 4
-	if fields[writeIndex] == "|" {
+	if len(fields) > writeIndex && fields[writeIndex] == "|" {
 		writeIndex++
 	}
-	if len(fields) <= writeIndex {
-		return nil, fmt.Errorf("expected write value at field %d, got %d fields", writeIndex, len(fields))
-	}
-	writeVal, err := strconv.ParseFloat(fields[writeIndex], 64)
-	if err != nil {
-		return nil, err
+	var writeVal float64
+	hasWrite := len(fields) > writeIndex
+	if hasWrite {
+		writeVal, err = strconv.ParseFloat(fields[writeIndex], 64)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var metricID string
@@ -96,6 +97,10 @@ func parseRPCLine(line, source, component, target, rpcType, section string) ([]O
 		{"read", readVal},
 		{"write", writeVal},
 	} {
+		if op.name == "write" && !hasWrite {
+			continue
+		}
+
 		labels := map[string]string{
 			"component": component,
 			"target":    target,
