@@ -182,17 +182,22 @@ func assertMetric(t *testing.T, metrics []prometheus.Metric, name string, labels
 		if !labelsMatch(dm.GetLabel(), labels) {
 			continue
 		}
+		var gotValue float64
+		var gotType string
 		switch {
 		case dm.GetCounter() != nil:
-			if dm.GetCounter().GetValue() == value {
-				return
-			}
+			gotType = "counter"
+			gotValue = dm.GetCounter().GetValue()
 		case dm.GetGauge() != nil:
-			if dm.GetGauge().GetValue() == value {
-				return
-			}
+			gotType = "gauge"
+			gotValue = dm.GetGauge().GetValue()
+		default:
+			t.Fatalf("%s labels %v has no counter or gauge value", name, labels)
 		}
-		t.Fatalf("%s labels %v has wrong value: %v", name, labels, dm)
+		if gotValue == value {
+			return
+		}
+		t.Fatalf("%s labels %v has wrong %s value: got %v, want %v", name, labels, gotType, gotValue, value)
 	}
 	t.Fatalf("metric %s with labels %v not found", name, labels)
 }
