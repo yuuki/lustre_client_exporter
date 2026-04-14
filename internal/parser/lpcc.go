@@ -81,7 +81,9 @@ func ParseLpccStatus(data []byte, source string) ([]Observation, error) {
 		return nil, fmt.Errorf("lpcc status: %w", err)
 	}
 
-	var obs []Observation
+	const metricsPerCache = 17
+	const metricsPerMount = 6
+	obs := make([]Observation, 0, len(output)*(metricsPerCache+metricsPerMount))
 
 	for mountPath, entry := range output {
 		// Per-cache metrics
