@@ -32,26 +32,37 @@ func NewLNetCollector(r reader.Reader, cfg discovery.PathConfig, source discover
 
 func (c *LNetCollector) Name() string { return "lnet" }
 
+func (c *LNetCollector) ScrapeSource() string {
+	if c.source == discovery.LNetSourceLNetCtl {
+		return "lctl"
+	}
+	return "sys"
+}
+
 func (c *LNetCollector) Collect(ctx context.Context) ([]prometheus.Metric, error) {
 	var allObs []parser.Observation
 
 	switch c.source {
 	case discovery.LNetSourceLNetCtl:
+		recordScrapeSource(ctx, "lctl")
 		obs, err := c.collectFromLNetCtl(ctx)
 		if err != nil {
 			return nil, err
 		}
 		allObs = append(allObs, obs...)
 	case discovery.LNetSourceDebugFS:
+		recordScrapeSource(ctx, "sys")
 		obs, err := c.collectFromDebugFS(ctx)
 		if err != nil {
 			return nil, err
 		}
 		allObs = append(allObs, obs...)
 	default: // auto
+		recordScrapeSource(ctx, "sys")
 		obs, err := c.collectFromDebugFS(ctx)
 		if err != nil {
 			c.logger.Debug("debugfs lnet not available, trying lnetctl", "error", err)
+			recordScrapeSource(ctx, "lctl")
 			obs, err = c.collectFromLNetCtl(ctx)
 			if err != nil {
 				return nil, err

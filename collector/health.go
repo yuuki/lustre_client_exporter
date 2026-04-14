@@ -22,6 +22,8 @@ func NewHealthCollector(r reader.Reader, cfg discovery.PathConfig) *HealthCollec
 
 func (c *HealthCollector) Name() string { return "health" }
 
+func (c *HealthCollector) ScrapeSource() string { return "sysfs" }
+
 func (c *HealthCollector) Collect(ctx context.Context) ([]prometheus.Metric, error) {
 	path := discovery.HealthPath(c.pathCfg)
 

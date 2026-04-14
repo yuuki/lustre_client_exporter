@@ -29,6 +29,12 @@ func TestHealthCollector_Healthy(t *testing.T) {
 	if m.GetGauge().GetValue() != 1.0 {
 		t.Errorf("health value = %f, want 1.0", m.GetGauge().GetValue())
 	}
+	if !labelsMatch(m.GetLabel(), map[string]string{
+		"component": "health",
+		"target":    "lustre",
+	}) {
+		t.Fatalf("health labels = %v, want component=health target=lustre", m.GetLabel())
+	}
 }
 
 func TestHealthCollector_Unhealthy(t *testing.T) {

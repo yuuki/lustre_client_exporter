@@ -28,6 +28,13 @@ var lnetStatsFields = []struct {
 	{"drop_bytes_total", Counter},
 }
 
+func lnetBaseLabels() map[string]string {
+	return map[string]string{
+		"component": "lnet",
+		"target":    "lnet",
+	}
+}
+
 // ParseLNetStats parses the single-line /proc/sys/lnet/stats file.
 func ParseLNetStats(data []byte, source string) ([]Observation, error) {
 	line := strings.TrimSpace(string(data))
@@ -51,7 +58,7 @@ func ParseLNetStats(data []byte, source string) ([]Observation, error) {
 			Source:     source,
 			MetricID:   lnetStatsFields[i].metricID,
 			MetricType: lnetStatsFields[i].metricType,
-			Labels:     nil,
+			Labels:     lnetBaseLabels(),
 			Value:      val,
 		})
 	}
@@ -95,7 +102,7 @@ func ParseLNetParam(data []byte, source string, paramName string) ([]Observation
 			Source:     source,
 			MetricID:   entry.metricID,
 			MetricType: entry.metricType,
-			Labels:     nil,
+			Labels:     lnetBaseLabels(),
 			Value:      val,
 		},
 	}, nil
@@ -150,17 +157,17 @@ func ParseLNetCtlStats(data []byte, source string) ([]Observation, error) {
 
 	s := stats.Statistics
 	return []Observation{
-		{Collector: "lnet", Source: source, MetricID: "allocated", MetricType: Gauge, Value: s.MsgsAlloc},
-		{Collector: "lnet", Source: source, MetricID: "maximum", MetricType: Gauge, Value: s.MsgsMax},
-		{Collector: "lnet", Source: source, MetricID: "errors_total", MetricType: Counter, Value: s.Errors},
-		{Collector: "lnet", Source: source, MetricID: "send_count_total", MetricType: Counter, Value: s.SendCount},
-		{Collector: "lnet", Source: source, MetricID: "receive_count_total", MetricType: Counter, Value: s.RecvCount},
-		{Collector: "lnet", Source: source, MetricID: "route_count_total", MetricType: Counter, Value: s.RouteCount},
-		{Collector: "lnet", Source: source, MetricID: "drop_count_total", MetricType: Counter, Value: s.DropCount},
-		{Collector: "lnet", Source: source, MetricID: "send_bytes_total", MetricType: Counter, Value: s.SendLength},
-		{Collector: "lnet", Source: source, MetricID: "receive_bytes_total", MetricType: Counter, Value: s.RecvLength},
-		{Collector: "lnet", Source: source, MetricID: "route_bytes_total", MetricType: Counter, Value: s.RouteLength},
-		{Collector: "lnet", Source: source, MetricID: "drop_bytes_total", MetricType: Counter, Value: s.DropLength},
+		{Collector: "lnet", Source: source, MetricID: "allocated", MetricType: Gauge, Labels: lnetBaseLabels(), Value: s.MsgsAlloc},
+		{Collector: "lnet", Source: source, MetricID: "maximum", MetricType: Gauge, Labels: lnetBaseLabels(), Value: s.MsgsMax},
+		{Collector: "lnet", Source: source, MetricID: "errors_total", MetricType: Counter, Labels: lnetBaseLabels(), Value: s.Errors},
+		{Collector: "lnet", Source: source, MetricID: "send_count_total", MetricType: Counter, Labels: lnetBaseLabels(), Value: s.SendCount},
+		{Collector: "lnet", Source: source, MetricID: "receive_count_total", MetricType: Counter, Labels: lnetBaseLabels(), Value: s.RecvCount},
+		{Collector: "lnet", Source: source, MetricID: "route_count_total", MetricType: Counter, Labels: lnetBaseLabels(), Value: s.RouteCount},
+		{Collector: "lnet", Source: source, MetricID: "drop_count_total", MetricType: Counter, Labels: lnetBaseLabels(), Value: s.DropCount},
+		{Collector: "lnet", Source: source, MetricID: "send_bytes_total", MetricType: Counter, Labels: lnetBaseLabels(), Value: s.SendLength},
+		{Collector: "lnet", Source: source, MetricID: "receive_bytes_total", MetricType: Counter, Labels: lnetBaseLabels(), Value: s.RecvLength},
+		{Collector: "lnet", Source: source, MetricID: "route_bytes_total", MetricType: Counter, Labels: lnetBaseLabels(), Value: s.RouteLength},
+		{Collector: "lnet", Source: source, MetricID: "drop_bytes_total", MetricType: Counter, Labels: lnetBaseLabels(), Value: s.DropLength},
 	}, nil
 }
 
@@ -177,7 +184,8 @@ func ParseLNetCtlNetStats(data []byte, source string) ([]Observation, error) {
 			if ni.NID == "" {
 				continue
 			}
-			labels := map[string]string{"nid": ni.NID}
+			labels := lnetBaseLabels()
+			labels["nid"] = ni.NID
 			observations = append(observations,
 				Observation{
 					Collector:  "lnet",

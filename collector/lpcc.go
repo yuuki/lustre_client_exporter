@@ -27,6 +27,8 @@ func NewLpccCollector(r reader.Reader, lpccBin string, logger *slog.Logger) *Lpc
 
 func (c *LpccCollector) Name() string { return "lpcc" }
 
+func (c *LpccCollector) ScrapeSource() string { return "lpcc" }
+
 func (c *LpccCollector) Collect(ctx context.Context) ([]prometheus.Metric, error) {
 	data, err := c.reader.RunCommand(ctx, c.lpccBin, "status")
 	if err != nil {

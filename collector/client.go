@@ -40,6 +40,8 @@ func NewClientCollectorWithStrict(r reader.Reader, cfg discovery.PathConfig, log
 
 func (c *ClientCollector) Name() string { return "client" }
 
+func (c *ClientCollector) ScrapeSource() string { return "procfs" }
+
 func (c *ClientCollector) Collect(ctx context.Context) ([]prometheus.Metric, error) {
 	targets, err := discovery.DiscoverClients(ctx, c.reader, c.pathCfg)
 	if err != nil {

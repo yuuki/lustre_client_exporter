@@ -16,8 +16,11 @@ func ParseHealth(data []byte, source string) ([]Observation, error) {
 			Source:     source,
 			MetricID:   "health_check",
 			MetricType: Gauge,
-			Labels:     nil,
-			Value:      value,
+			Labels: map[string]string{
+				"component": "health",
+				"target":    "lustre",
+			},
+			Value: value,
 		},
 	}, nil
 }

@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/yuuki/lustre_exporter/internal/discovery"
 	"github.com/yuuki/lustre_exporter/internal/reader"
@@ -60,6 +61,15 @@ func TestLNetCollector_DebugFS(t *testing.T) {
 	if len(metrics) != 22 {
 		t.Fatalf("got %d metrics, want 22", len(metrics))
 	}
+
+	assertMetric(t, metrics, "lustre_allocated", map[string]string{
+		"component": "lnet",
+		"target":    "lnet",
+	}, 0)
+	assertMetric(t, metrics, "lustre_console_backoff_enabled", map[string]string{
+		"component": "lnet",
+		"target":    "lnet",
+	}, 1)
 }
 
 func TestLNetCollector_LNetCtl(t *testing.T) {
@@ -109,25 +119,14 @@ func TestLNetCollector_DebugFSReadsDebugFSStatsAndParams(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	found := map[string]float64{}
-	for _, m := range metrics {
-		var dm dto.Metric
-		if err := m.Write(&dm); err != nil {
-			t.Fatal(err)
-		}
-		if dm.GetGauge() != nil {
-			found[extractMetricName(m.Desc().String())] = dm.GetGauge().GetValue()
-		} else if dm.GetCounter() != nil {
-			found[extractMetricName(m.Desc().String())] = dm.GetCounter().GetValue()
-		}
-	}
-
-	if found["lustre_send_count_total"] != 512 {
-		t.Errorf("lustre_send_count_total = %f, want 512", found["lustre_send_count_total"])
-	}
-	if found["lustre_fail_maximum"] != 7 {
-		t.Errorf("lustre_fail_maximum = %f, want 7", found["lustre_fail_maximum"])
-	}
+	assertMetric(t, metrics, "lustre_send_count_total", map[string]string{
+		"component": "lnet",
+		"target":    "lnet",
+	}, 512)
+	assertMetric(t, metrics, "lustre_fail_maximum", map[string]string{
+		"component": "lnet",
+		"target":    "lnet",
+	}, 7)
 }
 
 func TestLNetCollector_LNetCtlNetShowAddsNIDLabels(t *testing.T) {
@@ -192,4 +191,39 @@ func TestLNetCollector_Auto_FallbackToLNetCtl(t *testing.T) {
 	if len(metrics) != 11 {
 		t.Fatalf("got %d metrics, want 11", len(metrics))
 	}
+}
+
+func TestLNetCollector_AutoFallbackReportsLctlScrapeSource(t *testing.T) {
+	r := reader.NewFakeReader()
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+
+	jsonData, err := os.ReadFile("../testdata/lnet/lnetctl_stats.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Commands["lnetctl stats show"] = jsonData
+
+	registry := NewRegistry(logger, 0, 0, NewLNetCollector(r, discovery.DefaultPathConfig(), discovery.LNetSourceAuto, "lnetctl", logger))
+	ch := make(chan prometheus.Metric, 16)
+
+	registry.Collect(ch)
+	close(ch)
+
+	for metric := range ch {
+		if extractMetricName(metric.Desc().String()) != "lustre_exporter_scrape_duration_seconds" {
+			continue
+		}
+		var dm dto.Metric
+		if err := metric.Write(&dm); err != nil {
+			t.Fatal(err)
+		}
+		if labelsMatch(dm.GetLabel(), map[string]string{
+			"result": "success",
+			"source": "lctl",
+		}) {
+			return
+		}
+	}
+
+	t.Fatal("expected auto fallback scrape duration to report source=lctl")
 }
