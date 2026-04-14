@@ -93,6 +93,9 @@ var expectedMetricNames = map[string]bool{
 	"lustre_pages_per_rpc_total": true,
 	"lustre_rpcs_in_flight":      true,
 	"lustre_rpcs_offset":         true,
+
+	// LDLM
+	"lustre_ldlm_cbd_stats": true,
 }
 
 // excludedMetricNames lists metrics we explicitly do NOT emit.
@@ -249,6 +252,9 @@ func newFullFakeReader(t *testing.T) *reader.FakeReader {
 	for _, name := range lnetParams {
 		loadFixture(t, r, "/proc/sys/lnet/"+name, "../testdata/lnet/params/"+name)
 	}
+
+	// LDLM
+	loadFixture(t, r, "/proc/fs/lustre/ldlm/services/ldlm_cbd/stats", "../testdata/ldlm/ldlm_cbd_stats.txt")
 
 	return r
 }

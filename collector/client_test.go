@@ -169,6 +169,31 @@ offset                rpcs   % cum % |       rpcs   % cum %
 	}, 158331)
 }
 
+func TestClientCollector_LDLMCBDStats(t *testing.T) {
+	r := reader.NewFakeReader()
+	loadFixture(t, r, "/proc/fs/lustre/ldlm/services/ldlm_cbd/stats", "../testdata/ldlm/ldlm_cbd_stats.txt")
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	c := NewClientCollector(r, discovery.DefaultPathConfig(), logger)
+	metrics, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertMetric(t, metrics, "lustre_ldlm_cbd_stats", map[string]string{
+		"operation": "ldlm_bl_callback",
+	}, 1236010)
+	assertMetric(t, metrics, "lustre_ldlm_cbd_stats", map[string]string{
+		"operation": "ldlm_cp_callback",
+	}, 421007)
+	assertMetric(t, metrics, "lustre_ldlm_cbd_stats", map[string]string{
+		"operation": "ldlm_gl_callback",
+	}, 99914)
+	assertMetric(t, metrics, "lustre_ldlm_cbd_stats", map[string]string{
+		"operation": "reqbuf_avail",
+	}, 3575360)
+}
+
 func TestClientCollector_StrictReturnsErrorOnTargetFailure(t *testing.T) {
 	r := reader.NewFakeReader()
 	r.Globs["/proc/fs/lustre/llite/*/stats"] = []string{

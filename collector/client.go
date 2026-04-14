@@ -48,6 +48,16 @@ func (c *ClientCollector) Collect(ctx context.Context) ([]prometheus.Metric, err
 
 	var allObs []parser.Observation
 
+	ldlmObs, err := c.collectLDLMCBD(ctx)
+	if err != nil {
+		if c.strict {
+			return nil, err
+		}
+		c.logger.Warn("ldlm_cbd stats collection failed", "error", err)
+	} else {
+		allObs = append(allObs, ldlmObs...)
+	}
+
 	for _, t := range targets {
 		switch t.Component {
 		case "llite":
@@ -78,6 +88,15 @@ func (c *ClientCollector) Collect(ctx context.Context) ([]prometheus.Metric, err
 		return nil, err
 	}
 	return emitter.Emit(mapped), nil
+}
+
+func (c *ClientCollector) collectLDLMCBD(ctx context.Context) ([]parser.Observation, error) {
+	data, path, err := reader.ReadFirstAvailable(ctx, c.reader, discovery.LDLMCBDStatsPaths(c.pathCfg))
+	if err != nil {
+		c.logger.Debug("ldlm_cbd stats not available", "error", err)
+		return nil, nil
+	}
+	return parser.ParseLDLMCBDStats(data, path)
 }
 
 func (c *ClientCollector) collectLLite(ctx context.Context, t discovery.ClientTarget) ([]parser.Observation, error) {

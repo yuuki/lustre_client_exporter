@@ -60,9 +60,9 @@ lustre_client_exporter [flags]
 
 Reads `/sys/fs/lustre/health_check`. Emits `lustre_health_check` (1 = healthy, 0 = unhealthy).
 
-### Client (llite / mdc / osc)
+### Client (llite / mdc / osc / ldlm_cbd)
 
-Reads client filesystem stats, capacity, tunables, and RPC statistics from `/proc/fs/lustre/llite/*/`, `/proc/fs/lustre/mdc/*/`, and `/proc/fs/lustre/osc/*/`.
+Reads client filesystem stats, capacity, tunables, RPC statistics, and LDLM callback service stats from `/proc/fs/lustre/llite/*/`, `/proc/fs/lustre/mdc/*/`, `/proc/fs/lustre/osc/*/`, and `ldlm/services/ldlm_cbd/stats`.
 
 ### SPTLRPC
 

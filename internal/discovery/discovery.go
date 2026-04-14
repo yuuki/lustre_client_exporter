@@ -47,6 +47,14 @@ func SptlrpcPaths(cfg PathConfig) []string {
 	}
 }
 
+// LDLMCBDStatsPaths returns known locations for LDLM callback service stats.
+func LDLMCBDStatsPaths(cfg PathConfig) []string {
+	return []string{
+		filepath.Join(cfg.DebugFS, "lustre", "ldlm", "services", "ldlm_cbd", "stats"),
+		filepath.Join(cfg.ProcFS, "fs", "lustre", "ldlm", "services", "ldlm_cbd", "stats"),
+	}
+}
+
 // LNetSource represents the source to use for LNet stats.
 type LNetSource int
 

@@ -320,6 +320,12 @@ var Registry = map[string]MetricDef{
 		Type:      parser.Counter,
 		LabelKeys: []string{"component", "target", "operation"},
 	},
+	"ldlm_cbd_stats": {
+		Name:      "lustre_ldlm_cbd_stats",
+		Help:      "Gives information about LDLM Callback service.",
+		Type:      parser.Counter,
+		LabelKeys: []string{"operation"},
+	},
 
 	// Client tunable metrics
 	"checksum_pages_enabled": {

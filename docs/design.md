@@ -133,6 +133,7 @@ Lustre files are present:
 - `lustre_write_maximum_size_bytes`
 - `lustre_write_bytes_total`
 - `lustre_stats_total`
+- `lustre_ldlm_cbd_stats`
 - `lustre_pages_per_rpc_total`
 - `lustre_rpcs_in_flight`
 - `lustre_rpcs_offset`
