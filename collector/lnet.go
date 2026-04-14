@@ -43,13 +43,13 @@ func (c *LNetCollector) Collect(ctx context.Context) ([]prometheus.Metric, error
 		}
 		allObs = append(allObs, obs...)
 	case discovery.LNetSourceDebugFS:
-		obs, err := c.collectFromDebugFS()
+		obs, err := c.collectFromDebugFS(ctx)
 		if err != nil {
 			return nil, err
 		}
 		allObs = append(allObs, obs...)
 	default: // auto
-		obs, err := c.collectFromDebugFS()
+		obs, err := c.collectFromDebugFS(ctx)
 		if err != nil {
 			c.logger.Debug("debugfs lnet not available, trying lnetctl", "error", err)
 			obs, err = c.collectFromLNetCtl(ctx)
@@ -60,7 +60,7 @@ func (c *LNetCollector) Collect(ctx context.Context) ([]prometheus.Metric, error
 		allObs = append(allObs, obs...)
 	}
 
-	paramObs := c.collectParams()
+	paramObs := c.collectParams(ctx)
 	allObs = append(allObs, paramObs...)
 
 	mapped, err := mapper.Map(allObs)
@@ -70,8 +70,8 @@ func (c *LNetCollector) Collect(ctx context.Context) ([]prometheus.Metric, error
 	return emitter.Emit(mapped), nil
 }
 
-func (c *LNetCollector) collectFromDebugFS() ([]parser.Observation, error) {
-	data, path, err := reader.ReadFirstAvailable(c.reader, discovery.LNetStatsPaths(c.pathCfg))
+func (c *LNetCollector) collectFromDebugFS(ctx context.Context) ([]parser.Observation, error) {
+	data, path, err := reader.ReadFirstAvailable(ctx, c.reader, discovery.LNetStatsPaths(c.pathCfg))
 	if err != nil {
 		return nil, err
 	}
@@ -120,10 +120,10 @@ func dropGlobalLNetCountStats(obs []parser.Observation) []parser.Observation {
 	return filtered
 }
 
-func (c *LNetCollector) collectParams() []parser.Observation {
+func (c *LNetCollector) collectParams(ctx context.Context) []parser.Observation {
 	var allObs []parser.Observation
 	for _, paramName := range discovery.LNetParamNames {
-		data, path, err := reader.ReadFirstAvailable(c.reader, discovery.LNetParamPaths(c.pathCfg, paramName))
+		data, path, err := reader.ReadFirstAvailable(ctx, c.reader, discovery.LNetParamPaths(c.pathCfg, paramName))
 		if err != nil {
 			continue
 		}

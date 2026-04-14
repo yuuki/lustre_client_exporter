@@ -25,7 +25,7 @@ func (c *HealthCollector) Name() string { return "health" }
 func (c *HealthCollector) Collect(ctx context.Context) ([]prometheus.Metric, error) {
 	path := discovery.HealthPath(c.pathCfg)
 
-	data, err := c.reader.ReadFile(path)
+	data, err := c.reader.ReadFile(ctx, path)
 	if err != nil {
 		return nil, err
 	}

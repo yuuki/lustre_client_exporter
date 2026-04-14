@@ -23,7 +23,7 @@ func NewSptlrpcCollector(r reader.Reader, cfg discovery.PathConfig) *SptlrpcColl
 func (c *SptlrpcCollector) Name() string { return "sptlrpc" }
 
 func (c *SptlrpcCollector) Collect(ctx context.Context) ([]prometheus.Metric, error) {
-	data, path, err := reader.ReadFirstAvailable(c.reader, discovery.SptlrpcPaths(c.pathCfg))
+	data, path, err := reader.ReadFirstAvailable(ctx, c.reader, discovery.SptlrpcPaths(c.pathCfg))
 	if err != nil {
 		return nil, err
 	}

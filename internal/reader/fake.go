@@ -23,7 +23,10 @@ func NewFakeReader() *FakeReader {
 	}
 }
 
-func (r *FakeReader) ReadFile(path string) ([]byte, error) {
+func (r *FakeReader) ReadFile(ctx context.Context, path string) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if err, ok := r.Errors[path]; ok {
 		return nil, err
 	}
@@ -34,7 +37,10 @@ func (r *FakeReader) ReadFile(path string) ([]byte, error) {
 	return data, nil
 }
 
-func (r *FakeReader) Glob(pattern string) ([]string, error) {
+func (r *FakeReader) Glob(ctx context.Context, pattern string) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if err, ok := r.Errors[pattern]; ok {
 		return nil, err
 	}

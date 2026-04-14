@@ -22,11 +22,12 @@ lustre_client_exporter [flags]
 |------|---------|-------------|
 | `-web.listen-address` | `:9169` | Address to listen on for web interface and telemetry |
 | `-web.telemetry-path` | `/metrics` | Path under which to expose metrics |
-| `-web.config.file` | | Path to TLS/auth configuration file |
+| `-web.config.file` | | Unsupported; setting this flag fails startup |
 | `-collector.client` | `true` | Enable the client (llite/mdc/osc) collector |
 | `-collector.lnet` | `true` | Enable the LNet collector |
 | `-collector.health` | `true` | Enable the health collector |
 | `-collector.sptlrpc` | `true` | Enable the sptlrpc collector |
+| `-collector.lpcc` | `false` | Enable the LPCC (Lustre PCC) collector |
 | `-collector.lnet.source` | `auto` | LNet data source: auto, debugfs, or lnetctl |
 | `-collector.scrape-timeout` | `30s` | Maximum duration of a scrape |
 | `-collector.source-timeout` | `10s` | Timeout for individual source reads |
@@ -36,6 +37,7 @@ lustre_client_exporter [flags]
 | `-path.sysfs` | `/sys` | sysfs mount point |
 | `-path.debugfs` | `/sys/kernel/debug` | debugfs mount point |
 | `-path.lnetctl` | `lnetctl` | Path to the lnetctl binary |
+| `-path.lpcc` | `lpcc` | Path to the lpcc binary |
 | `-log.level` | `info` | Log level: debug, info, warn, error |
 
 ## Collectors

@@ -63,12 +63,9 @@ func TestLpccCollector_CommandNotFound(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
 	c := NewLpccCollector(r, "lpcc", logger)
-	metrics, err := c.Collect(context.Background())
-	if err != nil {
-		t.Fatalf("expected no error on command failure, got: %v", err)
-	}
-	if metrics != nil {
-		t.Fatalf("expected nil metrics on command failure, got %d", len(metrics))
+	_, err := c.Collect(context.Background())
+	if err == nil {
+		t.Fatal("expected error on command failure")
 	}
 }
 
@@ -83,4 +80,3 @@ func TestLpccCollector_MalformedJSON(t *testing.T) {
 		t.Fatal("expected error for malformed JSON")
 	}
 }
-

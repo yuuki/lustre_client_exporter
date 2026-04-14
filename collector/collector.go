@@ -2,6 +2,7 @@ package collector
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -34,14 +35,20 @@ type Registry struct {
 	logger        *slog.Logger
 	scrapeTimeout time.Duration
 	sourceTimeout time.Duration
+	strict        bool
 }
 
 func NewRegistry(logger *slog.Logger, scrapeTimeout, sourceTimeout time.Duration, collectors ...Collector) *Registry {
+	return NewRegistryWithStrict(logger, scrapeTimeout, sourceTimeout, false, collectors...)
+}
+
+func NewRegistryWithStrict(logger *slog.Logger, scrapeTimeout, sourceTimeout time.Duration, strict bool, collectors ...Collector) *Registry {
 	return &Registry{
 		collectors:    collectors,
 		logger:        logger,
 		scrapeTimeout: scrapeTimeout,
 		sourceTimeout: sourceTimeout,
+		strict:        strict,
 	}
 }
 
@@ -80,6 +87,9 @@ func (r *Registry) Collect(ch chan<- prometheus.Metric) {
 			if err != nil {
 				r.logger.Warn("collector failed", "collector", c.Name(), "error", err)
 				success = 0.0
+				if r.strict {
+					ch <- prometheus.NewInvalidMetric(scrapeSuccessDesc, fmt.Errorf("%s collector failed: %w", c.Name(), err))
+				}
 			} else {
 				for _, m := range metrics {
 					ch <- m

@@ -86,3 +86,19 @@ func TestParseFlags_CustomAddress(t *testing.T) {
 		t.Errorf("listen address = %q, want %q", cfg.ListenAddress, ":8080")
 	}
 }
+
+func TestValidateConfigRejectsUnsupportedWebConfigFile(t *testing.T) {
+	cfg := &Config{WebConfigFile: "/etc/exporter/web.yml", LNetSource: "auto"}
+
+	if err := validateConfig(cfg); err == nil {
+		t.Fatal("expected error for unsupported web.config.file")
+	}
+}
+
+func TestValidateConfigRejectsInvalidLNetSource(t *testing.T) {
+	cfg := &Config{LNetSource: "bogus"}
+
+	if err := validateConfig(cfg); err == nil {
+		t.Fatal("expected error for invalid collector.lnet.source")
+	}
+}

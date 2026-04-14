@@ -38,7 +38,7 @@ lustre_client_exporter [flags]
 |---|---:|---|
 | `--web.listen-address` | `:9169` | Address and port for the HTTP server. |
 | `--web.telemetry-path` | `/metrics` | Path that exposes Prometheus metrics. |
-| `--web.config.file` | empty | Optional exporter-toolkit style web configuration for TLS or basic auth. |
+| `--web.config.file` | empty | Unsupported in the current implementation; setting it fails startup instead of silently serving without TLS/auth. |
 
 ### Collector Flags
 

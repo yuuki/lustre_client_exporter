@@ -68,3 +68,15 @@ func TestParseRPCStats_Empty(t *testing.T) {
 		t.Errorf("got %d for empty, want 0", len(obs))
 	}
 }
+
+func TestParseRPCStats_MalformedDataLineReturnsError(t *testing.T) {
+	data := []byte(`
+pages per rpc         rpcs   % cum %   rpcs   % cum %
+1:                   not_a_number  93  93   |     148562  92  92
+`)
+
+	_, err := ParseRPCStats(data, "test", "osc", "target", "osc")
+	if err == nil {
+		t.Fatal("expected error for malformed data line")
+	}
+}

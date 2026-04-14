@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"context"
 	"path/filepath"
 
 	"github.com/yuuki/lustre_exporter/internal/reader"
@@ -116,13 +117,13 @@ type ClientTarget struct {
 }
 
 // DiscoverClients enumerates all llite, mdc, and osc targets.
-func DiscoverClients(r reader.Reader, cfg PathConfig) ([]ClientTarget, error) {
+func DiscoverClients(ctx context.Context, r reader.Reader, cfg PathConfig) ([]ClientTarget, error) {
 	var targets []ClientTarget
 	seen := map[string]int{}
 
 	for _, component := range []string{"llite", "mdc", "osc"} {
 		pattern := filepath.Join(cfg.ProcFS, "fs", "lustre", component, "*", "stats")
-		matches, err := r.Glob(pattern)
+		matches, err := r.Glob(ctx, pattern)
 		if err != nil {
 			continue
 		}
@@ -145,7 +146,7 @@ func DiscoverClients(r reader.Reader, cfg PathConfig) ([]ClientTarget, error) {
 
 	for _, component := range []string{"mdc", "osc"} {
 		pattern := filepath.Join(cfg.ProcFS, "fs", "lustre", component, "*", "rpc_stats")
-		matches, err := r.Glob(pattern)
+		matches, err := r.Glob(ctx, pattern)
 		if err != nil {
 			continue
 		}

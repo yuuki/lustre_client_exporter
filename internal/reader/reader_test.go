@@ -11,7 +11,7 @@ func TestFakeReader_ReadFile(t *testing.T) {
 	r := NewFakeReader()
 	r.Files["/proc/fs/lustre/health_check"] = []byte("healthy\n")
 
-	data, err := r.ReadFile("/proc/fs/lustre/health_check")
+	data, err := r.ReadFile(context.Background(), "/proc/fs/lustre/health_check")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -23,7 +23,7 @@ func TestFakeReader_ReadFile(t *testing.T) {
 func TestFakeReader_ReadFileMissing(t *testing.T) {
 	r := NewFakeReader()
 
-	_, err := r.ReadFile("/nonexistent")
+	_, err := r.ReadFile(context.Background(), "/nonexistent")
 	if err == nil {
 		t.Fatal("expected error for missing file")
 	}
@@ -36,7 +36,7 @@ func TestFakeReader_Glob(t *testing.T) {
 		"/proc/fs/lustre/llite/home-ffff0002/stats",
 	}
 
-	matches, err := r.Glob("/proc/fs/lustre/llite/*/stats")
+	matches, err := r.Glob(context.Background(), "/proc/fs/lustre/llite/*/stats")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestFSReader_ReadFile(t *testing.T) {
 	}
 
 	r := NewFSReader("")
-	data, err := r.ReadFile(path)
+	data, err := r.ReadFile(context.Background(), path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestFSReader_WithRootFS(t *testing.T) {
 	}
 
 	r := NewFSReader(dir)
-	data, err := r.ReadFile("/sys/fs/lustre/health_check")
+	data, err := r.ReadFile(context.Background(), "/sys/fs/lustre/health_check")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestFSReader_Glob(t *testing.T) {
 	}
 
 	r := NewFSReader(dir)
-	matches, err := r.Glob("/proc/fs/lustre/llite/*/stats")
+	matches, err := r.Glob(context.Background(), "/proc/fs/lustre/llite/*/stats")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -115,5 +115,16 @@ func TestFSReader_Glob(t *testing.T) {
 	}
 	if matches[0] != "/proc/fs/lustre/llite/scratch-ffff0001/stats" {
 		t.Errorf("got %q", matches[0])
+	}
+}
+
+func TestFSReader_ReadFileHonorsCanceledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	r := NewFSReader("")
+	_, err := r.ReadFile(ctx, "/definitely/not/here")
+	if err == nil {
+		t.Fatal("expected canceled context error")
 	}
 }

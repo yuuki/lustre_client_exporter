@@ -46,7 +46,7 @@ func ParseRPCStats(data []byte, source string, component string, target string, 
 
 		obs, err := parseRPCLine(line, source, component, target, rpcType, section)
 		if err != nil {
-			continue // skip malformed lines
+			return nil, fmt.Errorf("rpc stats %s: %q: %w", section, line, err)
 		}
 		observations = append(observations, obs...)
 	}

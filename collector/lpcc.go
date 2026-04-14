@@ -31,7 +31,7 @@ func (c *LpccCollector) Collect(ctx context.Context) ([]prometheus.Metric, error
 	data, err := c.reader.RunCommand(ctx, c.lpccBin, "status")
 	if err != nil {
 		c.logger.Warn("lpcc command failed", "error", err)
-		return nil, nil
+		return nil, err
 	}
 
 	obs, err := parser.ParseLpccStatus(data, "lpcc status")

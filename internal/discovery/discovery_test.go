@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"context"
 	"testing"
 
 	"github.com/yuuki/lustre_exporter/internal/reader"
@@ -18,7 +19,7 @@ func TestDiscoverClientsDiscoversRPCStatsWithoutStatsFile(t *testing.T) {
 		"/proc/fs/lustre/osc/nonexistent-OST9999-osc-0000000000000000/rpc_stats",
 	}
 
-	targets, err := DiscoverClients(r, DefaultPathConfig())
+	targets, err := DiscoverClients(context.Background(), r, DefaultPathConfig())
 	if err != nil {
 		t.Fatal(err)
 	}

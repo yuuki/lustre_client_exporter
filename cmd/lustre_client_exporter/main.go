@@ -57,7 +57,7 @@ func parseFlags() *Config {
 
 	flag.StringVar(&cfg.ListenAddress, "web.listen-address", ":9169", "Address to listen on for web interface and telemetry.")
 	flag.StringVar(&cfg.TelemetryPath, "web.telemetry-path", "/metrics", "Path under which to expose metrics.")
-	flag.StringVar(&cfg.WebConfigFile, "web.config.file", "", "Path to TLS/auth configuration file.")
+	flag.StringVar(&cfg.WebConfigFile, "web.config.file", "", "Unsupported: exporter-toolkit TLS/auth configuration is not implemented.")
 
 	flag.BoolVar(&cfg.CollectorClient, "collector.client", true, "Enable the client (llite/mdc/osc) collector.")
 	flag.BoolVar(&cfg.CollectorLNet, "collector.lnet", true, "Enable the LNet collector.")
@@ -100,6 +100,18 @@ func setupLogger(level string) *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: lvl}))
 }
 
+func validateConfig(cfg *Config) error {
+	if cfg.WebConfigFile != "" {
+		return fmt.Errorf("-web.config.file is not supported by this build")
+	}
+	switch cfg.LNetSource {
+	case "auto", "debugfs", "lnetctl":
+		return nil
+	default:
+		return fmt.Errorf("invalid -collector.lnet.source %q: expected auto, debugfs, or lnetctl", cfg.LNetSource)
+	}
+}
+
 func run() int {
 	cfg := parseFlags()
 
@@ -109,6 +121,10 @@ func run() int {
 	}
 
 	logger := setupLogger(cfg.LogLevel)
+	if err := validateConfig(cfg); err != nil {
+		logger.Error("invalid configuration", "error", err)
+		return 1
+	}
 
 	pathCfg := discovery.PathConfig{
 		ProcFS:  cfg.ProcFS,
@@ -136,14 +152,14 @@ func run() int {
 		collectors = append(collectors, collector.NewLNetCollector(r, pathCfg, lnetSource, cfg.LNetCtl, logger))
 	}
 	if cfg.CollectorClient {
-		collectors = append(collectors, collector.NewClientCollector(r, pathCfg, logger))
+		collectors = append(collectors, collector.NewClientCollectorWithStrict(r, pathCfg, logger, cfg.Strict))
 	}
 	if cfg.CollectorLpcc {
 		collectors = append(collectors, collector.NewLpccCollector(r, cfg.LpccBin, logger))
 	}
 
 	reg := prometheus.NewRegistry()
-	registry := collector.NewRegistry(logger, cfg.ScrapeTimeout, cfg.SourceTimeout, collectors...)
+	registry := collector.NewRegistryWithStrict(logger, cfg.ScrapeTimeout, cfg.SourceTimeout, cfg.Strict, collectors...)
 	reg.MustRegister(registry)
 
 	http.Handle(cfg.TelemetryPath, promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))

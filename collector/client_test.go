@@ -169,6 +169,20 @@ offset                rpcs   % cum % |       rpcs   % cum %
 	}, 158331)
 }
 
+func TestClientCollector_StrictReturnsErrorOnTargetFailure(t *testing.T) {
+	r := reader.NewFakeReader()
+	r.Globs["/proc/fs/lustre/llite/*/stats"] = []string{
+		"/proc/fs/lustre/llite/missing/stats",
+	}
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	c := NewClientCollectorWithStrict(r, discovery.DefaultPathConfig(), logger, true)
+	_, err := c.Collect(context.Background())
+	if err == nil {
+		t.Fatal("expected strict client collector to return target read error")
+	}
+}
+
 func assertMetric(t *testing.T, metrics []prometheus.Metric, name string, labels map[string]string, value float64) {
 	t.Helper()
 	for _, metric := range metrics {
