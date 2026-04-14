@@ -13,7 +13,7 @@ Download the latest release from [GitHub Releases](https://github.com/yuuki/lust
 ```sh
 VERSION=0.1.0
 ARCH=amd64  # or arm64
-curl -fsSL "https://github.com/yuuki/lustre_client_exporter/releases/download/v${VERSION}/lustre_exporter_${VERSION}_linux_${ARCH}.tar.gz" \
+curl -fsSL "https://github.com/yuuki/lustre_client_exporter/releases/download/v${VERSION}/lustre_client_exporter_${VERSION}_linux_${ARCH}.tar.gz" \
   | tar xz lustre_client_exporter
 sudo install -m 0755 lustre_client_exporter /usr/local/bin/
 ```
