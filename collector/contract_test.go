@@ -97,6 +97,15 @@ var expectedMetricNames = map[string]bool{
 	"lustre_rpcs_current":        true,
 	"lustre_pending_pages":       true,
 
+	// OSC / MDC writeback, RPC limits, and import state
+	"lustre_osc_dirty_bytes":        true,
+	"lustre_osc_max_dirty_bytes":    true,
+	"lustre_max_pages_per_rpc":      true,
+	"lustre_max_rpcs_in_flight":     true,
+	"lustre_max_mod_rpcs_in_flight": true,
+	"lustre_target_active":          true,
+	"lustre_target_state":           true,
+
 	// LDLM
 	"lustre_ldlm_cbd_stats": true,
 }

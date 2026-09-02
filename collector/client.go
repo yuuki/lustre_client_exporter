@@ -23,6 +23,17 @@ var lliteSingleFiles = []string{
 	"max_read_ahead_whole_mb", "statahead_agl", "statahead_max", "xattr_cache",
 }
 
+// oscParamFiles are optional OSC writeback / RPC / import files under ParamRoots.
+var oscParamFiles = []string{
+	"cur_dirty_bytes", "max_dirty_mb", "max_pages_per_rpc", "max_rpcs_in_flight", "active", "state",
+}
+
+// mdcParamFiles are optional MDC RPC / import files under ParamRoots.
+// max_pages_per_rpc is attempted; skip if the file is absent.
+var mdcParamFiles = []string{
+	"max_rpcs_in_flight", "max_mod_rpcs_in_flight", "max_pages_per_rpc", "active", "state",
+}
+
 // ClientCollector reads llite, mdc, and osc metrics.
 type ClientCollector struct {
 	reader  reader.Reader
@@ -195,6 +206,32 @@ func (c *ClientCollector) collectRPC(ctx context.Context, t discovery.ClientTarg
 				allObs = append(allObs, obs...)
 			}
 		}
+	}
+
+	paramFiles := oscParamFiles
+	if t.Component == "mdc" {
+		paramFiles = mdcParamFiles
+	}
+	for _, name := range paramFiles {
+		data, path, err := c.readParamFile(ctx, t, name)
+		if err != nil {
+			c.logger.Debug("client param file not found", "file", name, "component", t.Component, "target", t.Name)
+			continue
+		}
+		var obs []parser.Observation
+		if name == "state" {
+			obs, err = parser.ParseClientState(data, path, "client", t.Name, t.Component)
+		} else {
+			obs, err = parser.ParseClientSingleFile(data, path, name, "client", t.Name, t.Component)
+		}
+		if err != nil {
+			if c.strict {
+				return nil, err
+			}
+			c.logger.Warn("failed to parse client param file", "file", name, "component", t.Component, "target", t.Name, "error", err)
+			continue
+		}
+		allObs = append(allObs, obs...)
 	}
 
 	return allObs, nil

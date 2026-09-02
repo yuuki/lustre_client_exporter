@@ -53,6 +53,24 @@ func newTestClientFakeReader(t *testing.T) *reader.FakeReader {
 	loadFixture(t, r, "/proc/fs/lustre/osc/scratch-OST0000-osc-ffff0001/stats", "../testdata/osc/stats.txt")
 	loadFixture(t, r, "/proc/fs/lustre/osc/scratch-OST0000-osc-ffff0001/rpc_stats", "../testdata/osc/rpc_stats.txt")
 
+	// osc tunables and import state (virtual path is .../state, fixture is state.txt)
+	oscParamFiles := []string{
+		"cur_dirty_bytes", "max_dirty_mb", "max_pages_per_rpc", "max_rpcs_in_flight", "active",
+	}
+	for _, name := range oscParamFiles {
+		loadFixture(t, r, "/proc/fs/lustre/osc/scratch-OST0000-osc-ffff0001/"+name, "../testdata/osc/"+name)
+	}
+	loadFixture(t, r, "/proc/fs/lustre/osc/scratch-OST0000-osc-ffff0001/state", "../testdata/osc/state.txt")
+
+	// mdc tunables and import state (no max_pages_per_rpc fixture)
+	mdcParamFiles := []string{
+		"max_rpcs_in_flight", "max_mod_rpcs_in_flight", "active",
+	}
+	for _, name := range mdcParamFiles {
+		loadFixture(t, r, "/proc/fs/lustre/mdc/scratch-MDT0000-mdc-ffff0001/"+name, "../testdata/mdc/"+name)
+	}
+	loadFixture(t, r, "/proc/fs/lustre/mdc/scratch-MDT0000-mdc-ffff0001/state", "../testdata/mdc/state.txt")
+
 	return r
 }
 
@@ -352,6 +370,33 @@ func TestClientCollector_StrictReturnsErrorOnDiscoveredStatsRead(t *testing.T) {
 	c := NewClientCollectorWithStrict(r, discovery.DefaultPathConfig(), slog.New(slog.NewTextHandler(os.Stderr, nil)), true)
 	if _, err := c.Collect(context.Background()); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestClientCollector_WritebackAndState(t *testing.T) {
+	r := newTestClientFakeReader(t)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	c := NewClientCollector(r, discovery.DefaultPathConfig(), logger)
+	metrics, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	osc := "scratch-OST0000-osc-ffff0001"
+	mdc := "scratch-MDT0000-mdc-ffff0001"
+	assertMetric(t, metrics, "lustre_osc_dirty_bytes", map[string]string{"component": "client", "target": osc}, 1048576)
+	assertMetric(t, metrics, "lustre_osc_max_dirty_bytes", map[string]string{"component": "client", "target": osc}, 33554432)
+	assertMetric(t, metrics, "lustre_max_rpcs_in_flight", map[string]string{"component": "client", "target": osc, "type": "osc"}, 8)
+	assertMetric(t, metrics, "lustre_max_mod_rpcs_in_flight", map[string]string{"component": "client", "target": mdc, "type": "mdc"}, 16)
+	assertMetric(t, metrics, "lustre_target_active", map[string]string{"component": "client", "target": osc, "type": "osc"}, 1)
+	assertMetric(t, metrics, "lustre_target_state", map[string]string{"component": "client", "target": osc, "type": "osc", "state": "FULL"}, 1)
+}
+
+func TestClientCollector_MissingOptionalTunableIsNotStrictError(t *testing.T) {
+	r := newTestClientFakeReader(t)
+	delete(r.Files, "/proc/fs/lustre/osc/scratch-OST0000-osc-ffff0001/cur_dirty_bytes")
+	c := NewClientCollectorWithStrict(r, discovery.DefaultPathConfig(), slog.New(slog.NewTextHandler(os.Stderr, nil)), true)
+	if _, err := c.Collect(context.Background()); err != nil {
+		t.Fatal(err)
 	}
 }
 

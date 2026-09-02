@@ -140,6 +140,13 @@ Lustre files are present:
 - `lustre_rpcs_current`
 - `lustre_pending_pages`
 - `lustre_rpcs_offset`
+- `lustre_osc_dirty_bytes`
+- `lustre_osc_max_dirty_bytes`
+- `lustre_max_pages_per_rpc`
+- `lustre_max_rpcs_in_flight`
+- `lustre_max_mod_rpcs_in_flight`
+- `lustre_target_active`
+- `lustre_target_state`
 
 ### Client Tunable Metrics
 
