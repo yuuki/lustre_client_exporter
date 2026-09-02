@@ -223,10 +223,39 @@ data is available:
 - `lustre_catastrophe_enabled`
 - `lustre_lnet_memory_used_bytes`
 
-The `auto` LNet source mode should prefer debugfs for compatibility, fall back
-to legacy `/proc/sys/lnet` paths when needed, and use `lnetctl` where it gives
-structured data that fills gaps safely. When `lnetctl net show` is available,
-send, receive, and drop counters may include a `nid` label.
+Local network interface (NI) health metrics from `lnetctl net show -v 3`:
+
+- `lustre_lnet_ni_up`
+- `lustre_lnet_ni_health`
+- `lustre_lnet_ni_health_interrupts_total`
+- `lustre_lnet_ni_health_dropped_total`
+- `lustre_lnet_ni_health_aborted_total`
+- `lustre_lnet_ni_health_no_route_total`
+- `lustre_lnet_ni_health_timeouts_total`
+- `lustre_lnet_ni_health_errors_total`
+
+These carry a `nid` label. `lustre_lnet_ni_health_dropped_total` counts NI
+health drops and is distinct from `lustre_drop_count_total`.
+
+The exporter uses `lnetctl net show -v 3` because verbose level 3 includes NI
+health stats; level 4 is not required for this metric set. When `-v 3` fails,
+it falls back to plain `lnetctl net show`. The exporter does not call
+`lnetctl peer show` (peer health would increase cardinality and is not part of
+the default contract).
+
+### LNet Source Selection
+
+`--collector.lnet.source` controls how send/receive/drop counters and NI health
+are collected:
+
+| Source | Behavior |
+|---|---|
+| `lnetctl` | Runs `lnetctl stats show` (required) plus `lnetctl net show -v 3`, falling back to `lnetctl net show`. Emits global counters from `stats show`, per-NID counters from `net show`, and NI health metrics when verbose output is available. When `net show` returns per-NID counts, global `send_count_total`, `receive_count_total`, and `drop_count_total` from `stats show` are dropped to avoid duplicate series. |
+| `auto` | Reads LNet stats via `ReadFirstAvailable` on `LNetStatsPaths` (`/sys/kernel/debug/lnet/stats`, then `/proc/sys/lnet/stats`). Success on either path counts as debugfs collection. On success, non-fatal `lnetctl net show -v 3` (fallback `net show`) appends NI health metrics only; per-NID send/receive/drop counters are not added. On failure, falls back to the full `lnetctl` path above. |
+| `debugfs` | Reads stats and parameter files from debugfs and `/proc/sys/lnet/*` only. Does not run `lnetctl` or any external command. NI health metrics are not available from this source. |
+
+Parameter files (console backoff, memory usage, fail counters, and similar) are
+read from debugfs and procfs for all sources.
 
 ### Explicitly Excluded Metrics
 

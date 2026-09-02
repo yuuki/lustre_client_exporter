@@ -87,7 +87,19 @@ Reads `sptlrpc/encrypt_page_pools` from debugfs, falling back to `/proc/fs/lustr
 
 ### LNet
 
-Reads debugfs LNet stats and parameter files, falling back to `/proc/sys/lnet/*` where available. The `lnetctl` source reads `lnetctl stats show` and also uses `lnetctl net show` for per-NID send, receive, and drop counters when available.
+Reads LNet send/receive/drop counters, parameter tunables, and local network
+interface (NI) health. NI health metrics (`lustre_lnet_ni_up`,
+`lustre_lnet_ni_health`, and `lustre_lnet_ni_health_*_total`) carry a `nid`
+label and come from `lnetctl net show -v 3` when that command is available.
+The exporter uses `-v 3` because that verbose level includes NI health stats;
+`-v 4` is not required. When `-v 3` fails, it falls back to plain
+`lnetctl net show`. The exporter does not call `lnetctl peer show`.
+
+| Source | What is collected |
+|---|---|
+| `lnetctl` | `lnetctl stats show` (required) plus `lnetctl net show -v 3` (fallback `net show`). Global counters from `stats show`, per-NID send/receive/drop from `net show`, and NI health extras when verbose output is available. |
+| `auto` | On success reading LNet stats from debugfs or `/proc/sys/lnet/stats` (`ReadFirstAvailable` on `LNetStatsPaths`), emits those counters and non-fatally appends NI health from `net show -v 3` only. On failure, falls back to the full `lnetctl` path above. |
+| `debugfs` | Stats and parameter files from debugfs and `/proc/sys/lnet/*` only. Never runs `lnetctl`. NI health metrics are not available. |
 
 ## Development
 
