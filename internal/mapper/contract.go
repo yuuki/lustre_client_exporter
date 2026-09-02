@@ -342,6 +342,12 @@ var Registry = map[string]MetricDef{
 		Type:      parser.Counter,
 		LabelKeys: []string{"component", "target", "operation"},
 	},
+	"stats_seconds_sum": {
+		Name:      "lustre_stats_seconds_sum",
+		Help:      "Sum of Lustre client stats values whose source unit is a time unit, converted to seconds.",
+		Type:      parser.Counter,
+		LabelKeys: []string{"component", "target", "type", "operation"},
+	},
 	"ldlm_cbd_stats": {
 		Name:      "lustre_ldlm_cbd_stats",
 		Help:      "Gives information about LDLM Callback service.",
