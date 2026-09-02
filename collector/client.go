@@ -2,8 +2,11 @@ package collector
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
+	"os"
 	"path/filepath"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -191,10 +194,13 @@ func (c *ClientCollector) collectRPC(ctx context.Context, t discovery.ClientTarg
 	if t.RpcStatsPath != "" {
 		data, err := c.reader.ReadFile(ctx, t.RpcStatsPath)
 		if err != nil {
-			if c.strict {
+			if errors.Is(err, os.ErrNotExist) || errors.Is(err, fs.ErrNotExist) {
+				c.logger.Debug("rpc_stats not found", "component", t.Component, "target", t.Name, "path", t.RpcStatsPath, "error", err)
+			} else if c.strict {
 				return nil, err
+			} else {
+				c.logger.Warn("rpc_stats read failed", "component", t.Component, "target", t.Name, "error", err)
 			}
-			c.logger.Warn("rpc_stats read failed", "component", t.Component, "target", t.Name, "error", err)
 		} else {
 			obs, err := parser.ParseRPCStats(data, t.RpcStatsPath, "client", t.Name, t.Component)
 			if err != nil {

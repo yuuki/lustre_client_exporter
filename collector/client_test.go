@@ -373,6 +373,27 @@ func TestClientCollector_StrictReturnsErrorOnDiscoveredStatsRead(t *testing.T) {
 	}
 }
 
+func TestClientCollector_MissingSiblingRPCStatsIsNotStrictError(t *testing.T) {
+	r := reader.NewFakeReader()
+	r.Globs["/proc/fs/lustre/mdc/*/stats"] = []string{
+		"/proc/fs/lustre/mdc/scratch-MDT0000-mdc-ffff0001/stats",
+	}
+	r.Globs["/proc/fs/lustre/osc/*/stats"] = []string{
+		"/proc/fs/lustre/osc/scratch-OST0000-osc-ffff0001/stats",
+	}
+	loadFixture(t, r, "/proc/fs/lustre/mdc/scratch-MDT0000-mdc-ffff0001/stats", "../testdata/mdc/stats.txt")
+	loadFixture(t, r, "/proc/fs/lustre/osc/scratch-OST0000-osc-ffff0001/stats", "../testdata/osc/stats.txt")
+
+	c := NewClientCollectorWithStrict(r, discovery.DefaultPathConfig(), slog.New(slog.NewTextHandler(os.Stderr, nil)), true)
+	metrics, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(metrics) == 0 {
+		t.Fatal("expected stats metrics when sibling rpc_stats is absent")
+	}
+}
+
 func TestClientCollector_WritebackAndState(t *testing.T) {
 	r := newTestClientFakeReader(t)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
