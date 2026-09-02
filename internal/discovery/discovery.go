@@ -117,11 +117,45 @@ func LNetParamPaths(cfg PathConfig, paramName string) []string {
 
 // ClientTarget represents a discovered llite, mdc, or osc target.
 type ClientTarget struct {
-	Component    string // "llite", "mdc", or "osc"
-	Name         string // target name (mount name or target name)
-	StatsPath    string // path to stats file
-	RpcStatsPath string // path to rpc_stats file (mdc/osc only)
-	BasePath     string // base directory for single-value files
+	Component    string   // "llite", "mdc", or "osc"
+	Name         string   // target name (mount name or target name)
+	StatsPath    string   // path to stats file
+	RpcStatsPath string   // path to rpc_stats file (mdc/osc only)
+	BasePath     string   // ParamRoots[0]。既存テスト互換
+	ParamRoots   []string // proc, then sys. never debugfs
+}
+
+func clientParamRoots(cfg PathConfig, component, name string) []string {
+	return []string{
+		filepath.Join(cfg.ProcFS, "fs", "lustre", component, name),
+		filepath.Join(cfg.SysFS, "fs", "lustre", component, name),
+	}
+}
+
+func clientStatsPatterns(cfg PathConfig, component string) []string {
+	return []string{
+		filepath.Join(cfg.ProcFS, "fs", "lustre", component, "*", "stats"),
+		filepath.Join(cfg.SysFS, "fs", "lustre", component, "*", "stats"),
+		filepath.Join(cfg.DebugFS, "lustre", component, "*", "stats"),
+	}
+}
+
+func clientRPCStatsPatterns(cfg PathConfig, component string) []string {
+	return []string{
+		filepath.Join(cfg.ProcFS, "fs", "lustre", component, "*", "rpc_stats"),
+		filepath.Join(cfg.SysFS, "fs", "lustre", component, "*", "rpc_stats"),
+		filepath.Join(cfg.DebugFS, "lustre", component, "*", "rpc_stats"),
+	}
+}
+
+func newClientTarget(cfg PathConfig, component, name string) ClientTarget {
+	ct := ClientTarget{
+		Component:  component,
+		Name:       name,
+		ParamRoots: clientParamRoots(cfg, component, name),
+	}
+	ct.BasePath = ct.ParamRoots[0]
+	return ct
 }
 
 // DiscoverClients enumerates all llite, mdc, and osc targets.
@@ -130,50 +164,48 @@ func DiscoverClients(ctx context.Context, r reader.Reader, cfg PathConfig) ([]Cl
 	seen := map[string]int{}
 
 	for _, component := range []string{"llite", "mdc", "osc"} {
-		pattern := filepath.Join(cfg.ProcFS, "fs", "lustre", component, "*", "stats")
-		matches, err := r.Glob(ctx, pattern)
-		if err != nil {
-			continue
-		}
-		for _, statsPath := range matches {
-			dir := filepath.Dir(statsPath)
-			ct := ClientTarget{
-				Component: component,
-				Name:      filepath.Base(dir),
-				StatsPath: statsPath,
-				BasePath:  dir,
+		for _, pattern := range clientStatsPatterns(cfg, component) {
+			matches, err := r.Glob(ctx, pattern)
+			if err != nil {
+				continue
 			}
-			if component == "mdc" || component == "osc" {
-				ct.RpcStatsPath = filepath.Join(dir, "rpc_stats")
+			for _, statsPath := range matches {
+				dir := filepath.Dir(statsPath)
+				name := filepath.Base(dir)
+				key := component + "/" + name
+				if _, ok := seen[key]; ok {
+					continue
+				}
+				ct := newClientTarget(cfg, component, name)
+				ct.StatsPath = statsPath
+				if component == "mdc" || component == "osc" {
+					ct.RpcStatsPath = filepath.Join(dir, "rpc_stats")
+				}
+				seen[key] = len(targets)
+				targets = append(targets, ct)
 			}
-			key := component + "/" + ct.Name
-			seen[key] = len(targets)
-			targets = append(targets, ct)
 		}
 	}
 
 	for _, component := range []string{"mdc", "osc"} {
-		pattern := filepath.Join(cfg.ProcFS, "fs", "lustre", component, "*", "rpc_stats")
-		matches, err := r.Glob(ctx, pattern)
-		if err != nil {
-			continue
-		}
-		for _, rpcStatsPath := range matches {
-			dir := filepath.Dir(rpcStatsPath)
-			name := filepath.Base(dir)
-			key := component + "/" + name
-			if idx, ok := seen[key]; ok {
-				targets[idx].RpcStatsPath = rpcStatsPath
+		for _, pattern := range clientRPCStatsPatterns(cfg, component) {
+			matches, err := r.Glob(ctx, pattern)
+			if err != nil {
 				continue
 			}
+			for _, rpcStatsPath := range matches {
+				name := filepath.Base(filepath.Dir(rpcStatsPath))
+				key := component + "/" + name
+				if idx, ok := seen[key]; ok {
+					targets[idx].RpcStatsPath = rpcStatsPath
+					continue
+				}
 
-			seen[key] = len(targets)
-			targets = append(targets, ClientTarget{
-				Component:    component,
-				Name:         name,
-				RpcStatsPath: rpcStatsPath,
-				BasePath:     dir,
-			})
+				ct := newClientTarget(cfg, component, name)
+				ct.RpcStatsPath = rpcStatsPath
+				seen[key] = len(targets)
+				targets = append(targets, ct)
+			}
 		}
 	}
 

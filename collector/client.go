@@ -2,6 +2,7 @@ package collector
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"path/filepath"
 
@@ -117,8 +118,7 @@ func (c *ClientCollector) collectLLite(ctx context.Context, t discovery.ClientTa
 
 	// Parse single-value files
 	for _, name := range lliteSingleFiles {
-		path := filepath.Join(t.BasePath, name)
-		data, err := c.reader.ReadFile(ctx, path)
+		data, path, err := c.readParamFile(ctx, t, name)
 		if err != nil {
 			c.logger.Debug("llite file not found", "file", name, "target", t.Name)
 			continue
@@ -137,20 +137,63 @@ func (c *ClientCollector) collectLLite(ctx context.Context, t discovery.ClientTa
 	return allObs, nil
 }
 
+func (c *ClientCollector) readParamFile(ctx context.Context, t discovery.ClientTarget, name string) ([]byte, string, error) {
+	var lastErr error
+	for _, root := range t.ParamRoots {
+		path := filepath.Join(root, name)
+		data, err := c.reader.ReadFile(ctx, path)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		return data, path, nil
+	}
+	if lastErr == nil {
+		return nil, "", fmt.Errorf("param file %s not found", name)
+	}
+	return nil, "", lastErr
+}
+
 func (c *ClientCollector) collectRPC(ctx context.Context, t discovery.ClientTarget) ([]parser.Observation, error) {
 	var allObs []parser.Observation
 
-	// Parse rpc_stats if available
+	if t.StatsPath != "" {
+		data, err := c.reader.ReadFile(ctx, t.StatsPath)
+		if err != nil {
+			if c.strict {
+				return nil, err
+			}
+			c.logger.Warn("obd stats read failed", "component", t.Component, "target", t.Name, "error", err)
+		} else {
+			obs, err := parser.ParseOBDStats(data, t.StatsPath, "client", t.Name, t.Component)
+			if err != nil {
+				if c.strict {
+					return nil, err
+				}
+				c.logger.Warn("failed to parse obd stats", "component", t.Component, "target", t.Name, "error", err)
+			} else {
+				allObs = append(allObs, obs...)
+			}
+		}
+	}
+
 	if t.RpcStatsPath != "" {
 		data, err := c.reader.ReadFile(ctx, t.RpcStatsPath)
 		if err != nil {
-			c.logger.Debug("rpc_stats not available", "component", t.Component, "target", t.Name)
+			if c.strict {
+				return nil, err
+			}
+			c.logger.Warn("rpc_stats read failed", "component", t.Component, "target", t.Name, "error", err)
 		} else {
 			obs, err := parser.ParseRPCStats(data, t.RpcStatsPath, "client", t.Name, t.Component)
 			if err != nil {
-				return nil, err
+				if c.strict {
+					return nil, err
+				}
+				c.logger.Warn("failed to parse rpc stats", "component", t.Component, "target", t.Name, "error", err)
+			} else {
+				allObs = append(allObs, obs...)
 			}
-			allObs = append(allObs, obs...)
 		}
 	}
 

@@ -3,6 +3,7 @@ package collector
 import (
 	"bytes"
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"strings"
@@ -83,6 +84,34 @@ func TestClientCollector(t *testing.T) {
 	}
 
 	t.Logf("collected %d metrics total", len(metrics))
+}
+
+func TestClientCollector_MDCOSCStats(t *testing.T) {
+	r := newTestClientFakeReader(t)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	c := NewClientCollector(r, discovery.DefaultPathConfig(), logger)
+	metrics, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertMetric(t, metrics, "lustre_stats_total", map[string]string{
+		"component": "client",
+		"target":    "scratch-OST0000-osc-ffff0001",
+		"operation": "req_waittime",
+	}, 200)
+	assertMetric(t, metrics, "lustre_stats_seconds_sum", map[string]string{
+		"component": "client",
+		"target":    "scratch-OST0000-osc-ffff0001",
+		"type":      "osc",
+		"operation": "req_waittime",
+	}, 0.5)
+	assertMetric(t, metrics, "lustre_stats_seconds_sum", map[string]string{
+		"component": "client",
+		"target":    "scratch-MDT0000-mdc-ffff0001",
+		"type":      "mdc",
+		"operation": "mds_getattr",
+	}, 0.1)
 }
 
 func TestClientCollector_NoTargets(t *testing.T) {
@@ -272,6 +301,35 @@ func TestClientCollector_StrictReturnsErrorOnTargetFailure(t *testing.T) {
 	_, err := c.Collect(context.Background())
 	if err == nil {
 		t.Fatal("expected strict client collector to return target read error")
+	}
+}
+
+func TestClientCollector_LLiteParamsFromSysFSWhenStatsInDebugFS(t *testing.T) {
+	r := reader.NewFakeReader()
+	r.Globs["/sys/kernel/debug/lustre/llite/*/stats"] = []string{
+		"/sys/kernel/debug/lustre/llite/scratch-ffff0001/stats",
+	}
+	loadFixture(t, r, "/sys/kernel/debug/lustre/llite/scratch-ffff0001/stats", "../testdata/llite/stats.txt")
+	loadFixture(t, r, "/sys/fs/lustre/llite/scratch-ffff0001/blocksize", "../testdata/llite/blocksize")
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	c := NewClientCollector(r, discovery.DefaultPathConfig(), logger)
+	metrics, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMetric(t, metrics, "lustre_blocksize_bytes", map[string]string{
+		"component": "client",
+		"target":    "scratch-ffff0001",
+	}, 4194304)
+}
+
+func TestClientCollector_StrictReturnsErrorOnDiscoveredStatsRead(t *testing.T) {
+	r := newTestClientFakeReader(t)
+	r.Errors["/proc/fs/lustre/mdc/scratch-MDT0000-mdc-ffff0001/stats"] = errors.New("permission denied")
+	c := NewClientCollectorWithStrict(r, discovery.DefaultPathConfig(), slog.New(slog.NewTextHandler(os.Stderr, nil)), true)
+	if _, err := c.Collect(context.Background()); err == nil {
+		t.Fatal("expected error")
 	}
 }
 

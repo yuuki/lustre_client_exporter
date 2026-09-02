@@ -76,6 +76,7 @@ var expectedMetricNames = map[string]bool{
 	"lustre_write_maximum_size_bytes": true,
 	"lustre_write_bytes_total":        true,
 	"lustre_stats_total":              true,
+	"lustre_stats_seconds_sum":        true,
 
 	// Client tunables
 	"lustre_checksum_pages_enabled":                true,
