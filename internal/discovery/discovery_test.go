@@ -119,3 +119,28 @@ func TestDiscoverClientsStatsInDebugFSParamsInSysFS(t *testing.T) {
 		t.Fatalf("param1 = %q", targets[0].ParamRoots[1])
 	}
 }
+
+func TestDiscoverClientsKeepsStatsSiblingRPCStatsPath(t *testing.T) {
+	r := reader.NewFakeReader()
+	r.Globs["/proc/fs/lustre/osc/*/stats"] = []string{
+		"/proc/fs/lustre/osc/fs-OST0000-osc-aaaa/stats",
+	}
+	r.Globs["/sys/fs/lustre/osc/*/rpc_stats"] = []string{
+		"/sys/fs/lustre/osc/fs-OST0000-osc-aaaa/rpc_stats",
+	}
+	r.Globs["/sys/kernel/debug/lustre/osc/*/rpc_stats"] = []string{
+		"/sys/kernel/debug/lustre/osc/fs-OST0000-osc-aaaa/rpc_stats",
+	}
+
+	targets, err := DiscoverClients(context.Background(), r, DefaultPathConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(targets) != 1 {
+		t.Fatalf("got %d targets", len(targets))
+	}
+	want := "/proc/fs/lustre/osc/fs-OST0000-osc-aaaa/rpc_stats"
+	if targets[0].RpcStatsPath != want {
+		t.Fatalf("rpc = %q, want sibling %q", targets[0].RpcStatsPath, want)
+	}
+}

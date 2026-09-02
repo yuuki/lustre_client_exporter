@@ -197,7 +197,9 @@ func DiscoverClients(ctx context.Context, r reader.Reader, cfg PathConfig) ([]Cl
 				name := filepath.Base(filepath.Dir(rpcStatsPath))
 				key := component + "/" + name
 				if idx, ok := seen[key]; ok {
-					targets[idx].RpcStatsPath = rpcStatsPath
+					if targets[idx].RpcStatsPath == "" {
+						targets[idx].RpcStatsPath = rpcStatsPath
+					}
 					continue
 				}
 
