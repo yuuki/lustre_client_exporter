@@ -12,7 +12,8 @@ builds:
       - arm64
 
 archives:
-  - format: tar.gz
+  - formats:
+      - tar.gz
     name_template: "lustre_client_exporter_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - README.md
