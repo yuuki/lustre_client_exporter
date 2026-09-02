@@ -133,9 +133,12 @@ Lustre files are present:
 - `lustre_write_maximum_size_bytes`
 - `lustre_write_bytes_total`
 - `lustre_stats_total`
+- `lustre_stats_seconds_sum`
 - `lustre_ldlm_cbd_stats`
 - `lustre_pages_per_rpc_total`
 - `lustre_rpcs_in_flight`
+- `lustre_rpcs_current`
+- `lustre_pending_pages`
 - `lustre_rpcs_offset`
 
 ### Client Tunable Metrics
@@ -235,6 +238,8 @@ The MVP must not expose:
 - changelog metrics
 - server-side BRW metrics
 - MDS or OSS service statistics
+
+Client-side `req_waittime` from mdc/osc stats is not a service statistic.
 
 ## Internal Architecture
 

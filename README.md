@@ -69,6 +69,18 @@ Reads `/sys/fs/lustre/health_check`. Emits `lustre_health_check` (1 = healthy, 0
 
 Reads client filesystem stats, capacity, tunables, RPC statistics, and LDLM callback service stats from `/proc/fs/lustre/llite/*/`, `/proc/fs/lustre/mdc/*/`, `/proc/fs/lustre/osc/*/`, and `ldlm/services/ldlm_cbd/stats`.
 
+For mdc and osc targets, the collector also reads `stats` (operation counts and latency sums) and `rpc_stats` (current in-flight RPCs and pending pages). All of these metrics use `component="client"`; latency sums and instantaneous RPC values also carry `type="mdc"` or `type="osc"`.
+
+Average client-observed RPC wait time for an operation such as `req_waittime`:
+
+```promql
+rate(lustre_stats_seconds_sum{type="osc",operation="req_waittime"}[5m])
+/
+rate(lustre_stats_total{operation="req_waittime"}[5m])
+```
+
+This value reflects RPC wait as seen by this client, not server-side queue depth.
+
 ### SPTLRPC
 
 Reads `sptlrpc/encrypt_page_pools` from debugfs, falling back to `/proc/fs/lustre/sptlrpc/encrypt_page_pools`, for encryption page pool metrics.
