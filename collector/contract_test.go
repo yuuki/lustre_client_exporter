@@ -60,6 +60,16 @@ var expectedMetricNames = map[string]bool{
 	"lustre_fail_error_total":               true,
 	"lustre_fail_maximum":                   true,
 
+	// LNet local NI health
+	"lustre_lnet_ni_up":                      true,
+	"lustre_lnet_ni_health":                  true,
+	"lustre_lnet_ni_health_interrupts_total": true,
+	"lustre_lnet_ni_health_dropped_total":    true,
+	"lustre_lnet_ni_health_aborted_total":    true,
+	"lustre_lnet_ni_health_no_route_total":   true,
+	"lustre_lnet_ni_health_timeouts_total":   true,
+	"lustre_lnet_ni_health_errors_total":     true,
+
 	// Client core
 	"lustre_blocksize_bytes":          true,
 	"lustre_inodes_free":              true,
@@ -129,7 +139,7 @@ func TestContract_AllExpectedMetricsPresent(t *testing.T) {
 	collectors := []Collector{
 		NewHealthCollector(r, discovery.DefaultPathConfig()),
 		NewSptlrpcCollector(r, discovery.DefaultPathConfig()),
-		NewLNetCollector(r, discovery.DefaultPathConfig(), discovery.LNetSourceDebugFS, "lnetctl", logger),
+		NewLNetCollector(r, discovery.DefaultPathConfig(), discovery.LNetSourceAuto, "lnetctl", logger),
 		NewClientCollector(r, discovery.DefaultPathConfig(), logger),
 	}
 
@@ -162,7 +172,7 @@ func TestContract_ExcludedMetricsAbsent(t *testing.T) {
 	collectors := []Collector{
 		NewHealthCollector(r, discovery.DefaultPathConfig()),
 		NewSptlrpcCollector(r, discovery.DefaultPathConfig()),
-		NewLNetCollector(r, discovery.DefaultPathConfig(), discovery.LNetSourceDebugFS, "lnetctl", logger),
+		NewLNetCollector(r, discovery.DefaultPathConfig(), discovery.LNetSourceAuto, "lnetctl", logger),
 		NewClientCollector(r, discovery.DefaultPathConfig(), logger),
 	}
 
@@ -192,7 +202,7 @@ func TestContract_AllMetricsHaveLustrePrefix(t *testing.T) {
 	collectors := []Collector{
 		NewHealthCollector(r, discovery.DefaultPathConfig()),
 		NewSptlrpcCollector(r, discovery.DefaultPathConfig()),
-		NewLNetCollector(r, discovery.DefaultPathConfig(), discovery.LNetSourceDebugFS, "lnetctl", logger),
+		NewLNetCollector(r, discovery.DefaultPathConfig(), discovery.LNetSourceAuto, "lnetctl", logger),
 		NewClientCollector(r, discovery.DefaultPathConfig(), logger),
 	}
 
@@ -217,7 +227,7 @@ func TestContract_MetricTypes(t *testing.T) {
 	collectors := []Collector{
 		NewHealthCollector(r, discovery.DefaultPathConfig()),
 		NewSptlrpcCollector(r, discovery.DefaultPathConfig()),
-		NewLNetCollector(r, discovery.DefaultPathConfig(), discovery.LNetSourceDebugFS, "lnetctl", logger),
+		NewLNetCollector(r, discovery.DefaultPathConfig(), discovery.LNetSourceAuto, "lnetctl", logger),
 		NewClientCollector(r, discovery.DefaultPathConfig(), logger),
 	}
 
@@ -264,6 +274,12 @@ func newFullFakeReader(t *testing.T) *reader.FakeReader {
 	for _, name := range lnetParams {
 		loadFixture(t, r, "/proc/sys/lnet/"+name, "../testdata/lnet/params/"+name)
 	}
+
+	verbose, err := os.ReadFile("../testdata/lnet/lnetctl_net_show_verbose.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Commands["lnetctl net show -v 3"] = verbose
 
 	// LDLM
 	loadFixture(t, r, "/proc/fs/lustre/ldlm/services/ldlm_cbd/stats", "../testdata/ldlm/ldlm_cbd_stats.txt")

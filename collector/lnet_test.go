@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -137,12 +138,12 @@ func TestLNetCollector_LNetCtlNetShowAddsNIDLabels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	netData, err := os.ReadFile("../testdata/lnet/lnetctl_net_show.yaml")
+	netData, err := os.ReadFile("../testdata/lnet/lnetctl_net_show_verbose.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
 	r.Commands["lnetctl stats show"] = statsData
-	r.Commands["lnetctl net show"] = netData
+	r.Commands["lnetctl net show -v 3"] = netData
 
 	c := NewLNetCollector(r, discovery.DefaultPathConfig(), discovery.LNetSourceLNetCtl, "lnetctl", logger)
 	metrics, err := c.Collect(context.Background())
@@ -150,7 +151,16 @@ func TestLNetCollector_LNetCtlNetShowAddsNIDLabels(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var found bool
+	assertMetric(t, metrics, "lustre_send_count_total", map[string]string{
+		"component": "lnet", "target": "lnet", "nid": "0@lo",
+	}, 180076)
+	assertMetric(t, metrics, "lustre_lnet_ni_up", map[string]string{
+		"component": "lnet", "target": "lnet", "nid": "10.200.200.54@o2ib",
+	}, 0)
+	assertMetric(t, metrics, "lustre_lnet_ni_health", map[string]string{
+		"component": "lnet", "target": "lnet", "nid": "0@lo",
+	}, 0)
+
 	for _, m := range metrics {
 		if extractMetricName(m.Desc().String()) != "lustre_send_count_total" {
 			continue
@@ -159,15 +169,21 @@ func TestLNetCollector_LNetCtlNetShowAddsNIDLabels(t *testing.T) {
 		if err := m.Write(&dm); err != nil {
 			t.Fatal(err)
 		}
+		hasNID := false
 		for _, label := range dm.GetLabel() {
-			if label.GetName() == "nid" && label.GetValue() == "0@lo" && dm.GetCounter().GetValue() == 180076 {
-				found = true
+			if label.GetName() == "nid" {
+				hasNID = true
 			}
+		}
+		if !hasNID {
+			t.Fatal("expected no unlabeled lustre_send_count_total after nid counts")
 		}
 	}
 
-	if !found {
-		t.Fatal("expected lustre_send_count_total with nid=\"0@lo\" from lnetctl net show")
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(NewRegistry(logger, 0, 0, c))
+	if _, err := reg.Gather(); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -226,4 +242,78 @@ func TestLNetCollector_AutoFallbackReportsLctlScrapeSource(t *testing.T) {
 	}
 
 	t.Fatal("expected auto fallback scrape duration to report source=lctl")
+}
+
+func TestLNetCollector_AutoSupplementalNIDoesNotMixCountLabels(t *testing.T) {
+	r := newTestLNetFakeReader(t)
+	verbose, err := os.ReadFile("../testdata/lnet/lnetctl_net_show_verbose.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Commands["lnetctl net show -v 3"] = verbose
+	c := NewLNetCollector(r, discovery.DefaultPathConfig(), discovery.LNetSourceAuto, "lnetctl", slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	metrics, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMetric(t, metrics, "lustre_lnet_ni_up", map[string]string{
+		"component": "lnet", "target": "lnet", "nid": "10.200.200.54@o2ib",
+	}, 0)
+	assertMetric(t, metrics, "lustre_lnet_ni_health", map[string]string{
+		"component": "lnet", "target": "lnet", "nid": "0@lo",
+	}, 0)
+	assertMetric(t, metrics, "lustre_send_count_total", map[string]string{
+		"component": "lnet", "target": "lnet",
+	}, 512)
+	for _, m := range metrics {
+		if extractMetricName(m.Desc().String()) != "lustre_send_count_total" {
+			continue
+		}
+		var dm dto.Metric
+		if err := m.Write(&dm); err != nil {
+			t.Fatal(err)
+		}
+		for _, label := range dm.GetLabel() {
+			if label.GetName() == "nid" {
+				t.Fatal("auto supplemental must not add nid-labeled send_count")
+			}
+		}
+	}
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(NewRegistry(slog.New(slog.NewTextHandler(os.Stderr, nil)), 0, 0, c))
+	if _, err := reg.Gather(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+type commandSpyReader struct {
+	*reader.FakeReader
+	cmds []string
+}
+
+func (r *commandSpyReader) RunCommand(ctx context.Context, name string, args ...string) ([]byte, error) {
+	r.cmds = append(r.cmds, name+" "+strings.Join(args, " "))
+	return r.FakeReader.RunCommand(ctx, name, args...)
+}
+
+func TestLNetCollector_DebugFSDoesNotRunLnetctl(t *testing.T) {
+	spy := &commandSpyReader{FakeReader: newTestLNetFakeReader(t)}
+	spy.Commands["lnetctl net show -v 3"] = []byte("not: [ yaml")
+	c := NewLNetCollector(spy, discovery.DefaultPathConfig(), discovery.LNetSourceDebugFS, "lnetctl", slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	metrics, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(metrics) != 22 {
+		t.Fatalf("got %d, want 22", len(metrics))
+	}
+	if len(spy.cmds) != 0 {
+		t.Fatalf("debugfs source must not call RunCommand, got %v", spy.cmds)
+	}
+	for _, m := range metrics {
+		name := extractMetricName(m.Desc().String())
+		if len(name) >= 15 && name[:15] == "lustre_lnet_ni_" {
+			t.Fatalf("debugfs source must not emit %s", name)
+		}
+	}
 }
