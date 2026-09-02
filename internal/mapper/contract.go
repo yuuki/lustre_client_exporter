@@ -449,6 +449,44 @@ var Registry = map[string]MetricDef{
 		LabelKeys: []string{"component", "target", "type", "operation"},
 	},
 
+	// OSC / MDC single-value files
+	"osc_dirty_bytes": {
+		Name:      "lustre_osc_dirty_bytes",
+		Help:      "Current dirty bytes cached on a Lustre OSC.",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"component", "target"},
+	},
+	"osc_max_dirty_bytes": {
+		Name:      "lustre_osc_max_dirty_bytes",
+		Help:      "Maximum dirty bytes allowed on a Lustre OSC.",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"component", "target"},
+	},
+	"max_pages_per_rpc": {
+		Name:      "lustre_max_pages_per_rpc",
+		Help:      "Maximum pages allowed per RPC on a Lustre client import.",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"component", "target", "type"},
+	},
+	"max_rpcs_in_flight": {
+		Name:      "lustre_max_rpcs_in_flight",
+		Help:      "Maximum RPCs allowed in flight on a Lustre client import.",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"component", "target", "type"},
+	},
+	"max_mod_rpcs_in_flight": {
+		Name:      "lustre_max_mod_rpcs_in_flight",
+		Help:      "Maximum modify RPCs allowed in flight on a Lustre MDC import.",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"component", "target", "type"},
+	},
+	"target_active": {
+		Name:      "lustre_target_active",
+		Help:      "Whether a Lustre client import is active (1 = active, 0 = inactive).",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"component", "target", "type"},
+	},
+
 	// LPCC (Lustre PCC) per-cache metrics
 	"pcc_status": {
 		Name:      "lustre_pcc_status",
