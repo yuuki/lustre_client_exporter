@@ -251,6 +251,56 @@ var Registry = map[string]MetricDef{
 		LabelKeys: []string{"component", "target"},
 	},
 
+	// LNet local NI health (lnetctl net show -v 3)
+	"lnet_ni_up": {
+		Name:      "lustre_lnet_ni_up",
+		Help:      "Whether an LNet local network interface is up (1 = up, 0 = down).",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"component", "target", "nid"},
+	},
+	"lnet_ni_health": {
+		Name:      "lustre_lnet_ni_health",
+		Help:      "LNet local network interface health value (maximum 1000).",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"component", "target", "nid"},
+	},
+	"lnet_ni_health_interrupts_total": {
+		Name:      "lustre_lnet_ni_health_interrupts_total",
+		Help:      "Total number of LNet local NI health interrupts.",
+		Type:      parser.Counter,
+		LabelKeys: []string{"component", "target", "nid"},
+	},
+	"lnet_ni_health_dropped_total": {
+		Name:      "lustre_lnet_ni_health_dropped_total",
+		Help:      "Total number of LNet local NI health drops.",
+		Type:      parser.Counter,
+		LabelKeys: []string{"component", "target", "nid"},
+	},
+	"lnet_ni_health_aborted_total": {
+		Name:      "lustre_lnet_ni_health_aborted_total",
+		Help:      "Total number of LNet local NI health aborted operations.",
+		Type:      parser.Counter,
+		LabelKeys: []string{"component", "target", "nid"},
+	},
+	"lnet_ni_health_no_route_total": {
+		Name:      "lustre_lnet_ni_health_no_route_total",
+		Help:      "Total number of LNet local NI health no-route events.",
+		Type:      parser.Counter,
+		LabelKeys: []string{"component", "target", "nid"},
+	},
+	"lnet_ni_health_timeouts_total": {
+		Name:      "lustre_lnet_ni_health_timeouts_total",
+		Help:      "Total number of LNet local NI health timeouts.",
+		Type:      parser.Counter,
+		LabelKeys: []string{"component", "target", "nid"},
+	},
+	"lnet_ni_health_errors_total": {
+		Name:      "lustre_lnet_ni_health_errors_total",
+		Help:      "Total number of LNet local NI health errors.",
+		Type:      parser.Counter,
+		LabelKeys: []string{"component", "target", "nid"},
+	},
+
 	// Client core metrics (llite)
 	"blocksize_bytes": {
 		Name:      "lustre_blocksize_bytes",
