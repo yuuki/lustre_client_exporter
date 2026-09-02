@@ -215,6 +215,28 @@ rpcs in flight        rpcs   % cum % |       rpcs   % cum %
 	}
 }
 
+func TestClientCollector_RPCCurrentScalars(t *testing.T) {
+	r := newTestClientFakeReader(t)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	c := NewClientCollector(r, discovery.DefaultPathConfig(), logger)
+	metrics, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMetric(t, metrics, "lustre_rpcs_current", map[string]string{
+		"component": "client",
+		"target":    "scratch-OST0000-osc-ffff0001",
+		"type":      "osc",
+		"operation": "write",
+	}, 5)
+	assertMetric(t, metrics, "lustre_pending_pages", map[string]string{
+		"component": "client",
+		"target":    "scratch-OST0000-osc-ffff0001",
+		"type":      "osc",
+		"operation": "write",
+	}, 120)
+}
+
 func TestClientCollector_RPCStatsGSICompatibleLabels(t *testing.T) {
 	const target = "nonexistent-OST9999-osc-0000000000000000"
 	r := reader.NewFakeReader()

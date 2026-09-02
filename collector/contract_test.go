@@ -94,6 +94,8 @@ var expectedMetricNames = map[string]bool{
 	"lustre_pages_per_rpc_total": true,
 	"lustre_rpcs_in_flight":      true,
 	"lustre_rpcs_offset":         true,
+	"lustre_rpcs_current":        true,
+	"lustre_pending_pages":       true,
 
 	// LDLM
 	"lustre_ldlm_cbd_stats": true,

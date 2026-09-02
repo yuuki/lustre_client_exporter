@@ -1,4 +1,10 @@
 snapshot_time:         1681000000.123456789 (secs.nsecs)
+read RPCs in flight:  3
+write RPCs in flight: 5
+dio read RPCs in flight: 1
+dio write RPCs in flight: 0
+pending read pages:   8
+pending write pages:  120
 
                         read            write
 pages per rpc         rpcs   % cum %   rpcs   % cum %

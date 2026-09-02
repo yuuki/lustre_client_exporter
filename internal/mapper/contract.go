@@ -436,6 +436,18 @@ var Registry = map[string]MetricDef{
 		Type:      parser.Counter,
 		LabelKeys: []string{"component", "target", "operation", "size"},
 	},
+	"rpcs_current": {
+		Name:      "lustre_rpcs_current",
+		Help:      "Number of RPCs currently in flight on a Lustre client import.",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"component", "target", "type", "operation"},
+	},
+	"pending_pages": {
+		Name:      "lustre_pending_pages",
+		Help:      "Number of pages waiting to be sent on a Lustre client import.",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"component", "target", "type", "operation"},
+	},
 
 	// LPCC (Lustre PCC) per-cache metrics
 	"pcc_status": {

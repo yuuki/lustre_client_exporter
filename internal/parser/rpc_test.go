@@ -16,9 +16,9 @@ func TestParseRPCStats_MDC(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 3 sections * 4 rows * 2 (read+write) = 24
-	if len(obs) != 24 {
-		t.Fatalf("got %d observations, want 24", len(obs))
+	// 3 sections * 4 rows * 2 (read+write) = 24 histogram + 5 scalars = 29
+	if len(obs) != 29 {
+		t.Fatalf("got %d observations, want 29", len(obs))
 	}
 
 	// Check that components and targets are set
@@ -54,8 +54,39 @@ func TestParseRPCStats_OSC(t *testing.T) {
 
 	// 3 sections * 5 rows * 2 = 30
 	// Actually: pages_per_rpc (5 rows * 2) + rpcs_in_flight (4 rows * 2) + offset (4 rows * 2) = 10 + 8 + 8 = 26
-	if len(obs) != 26 {
-		t.Fatalf("got %d observations, want 26", len(obs))
+	// histogram 26 + current 4 + pending 2 = 32
+	if len(obs) != 32 {
+		t.Fatalf("got %d observations, want 32", len(obs))
+	}
+}
+
+func TestParseRPCStats_CurrentScalarsOSC(t *testing.T) {
+	data, err := os.ReadFile("../../testdata/osc/rpc_stats.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	obs, err := ParseRPCStats(data, "test", "client", "scratch-OST0000-osc-ffff0001", "osc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	current := map[string]float64{}
+	pending := map[string]float64{}
+	for _, o := range obs {
+		switch o.MetricID {
+		case "rpcs_current":
+			current[o.Labels["operation"]] = o.Value
+			if o.Labels["type"] != "osc" || o.MetricType != Gauge {
+				t.Fatalf("bad rpcs_current: %+v", o)
+			}
+		case "pending_pages":
+			pending[o.Labels["operation"]] = o.Value
+		}
+	}
+	if current["read"] != 3 || current["write"] != 5 || current["dio_read"] != 1 || current["dio_write"] != 0 {
+		t.Fatalf("current = %v", current)
+	}
+	if pending["read"] != 8 || pending["write"] != 120 {
+		t.Fatalf("pending = %v", pending)
 	}
 }
 
@@ -101,32 +132,35 @@ rpcs in flight        rpcs   % cum %
 	}
 }
 
-func TestParseRPCStats_SkipsScalarRpcsInFlightLines(t *testing.T) {
+func TestParseRPCStats_ScalarRpcsInFlightIsNotABucket(t *testing.T) {
 	data := []byte(`
 rpcs in flight        rpcs   % cum %
 read RPCs in flight:  0
 0:                    7 100 100
 `)
-
 	obs, err := ParseRPCStats(data, "test", "mdc", "target", "mdc")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(obs) != 1 {
-		t.Fatalf("got %d observations, want 1", len(obs))
+	var buckets, currents int
+	for _, o := range obs {
+		switch o.MetricID {
+		case "rpcs_in_flight":
+			buckets++
+			if o.Labels["size"] != "0" || o.Value != 7 {
+				t.Fatalf("bucket = %+v", o)
+			}
+		case "rpcs_current":
+			currents++
+			if o.Labels["operation"] != "read" || o.Value != 0 {
+				t.Fatalf("current = %+v", o)
+			}
+		default:
+			t.Fatalf("unexpected %s", o.MetricID)
+		}
 	}
-	got := obs[0]
-	if got.MetricID != "rpcs_in_flight" {
-		t.Errorf("MetricID = %q, want rpcs_in_flight", got.MetricID)
-	}
-	if got.Labels["operation"] != "read" {
-		t.Errorf("operation = %q, want read", got.Labels["operation"])
-	}
-	if got.Labels["size"] != "0" {
-		t.Errorf("size = %q, want 0", got.Labels["size"])
-	}
-	if got.Value != 7 {
-		t.Errorf("Value = %v, want 7", got.Value)
+	if buckets != 1 || currents != 1 {
+		t.Fatalf("buckets=%d currents=%d", buckets, currents)
 	}
 }
 
@@ -143,22 +177,27 @@ write RPCs in flight: 0
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(obs) != 2 {
-		t.Fatalf("got %d observations, want 2", len(obs))
-	}
 
 	found := map[string]float64{}
+	current := map[string]float64{}
 	for _, o := range obs {
-		if o.MetricID != "rpcs_in_flight" {
-			t.Errorf("MetricID = %q, want rpcs_in_flight", o.MetricID)
+		switch o.MetricID {
+		case "rpcs_in_flight":
+			found[o.Labels["operation"]+"/"+o.Labels["size"]] = o.Value
+		case "rpcs_current":
+			current[o.Labels["operation"]] = o.Value
+		default:
+			continue
 		}
-		found[o.Labels["operation"]+"/"+o.Labels["size"]] = o.Value
 	}
 	if found["read/1"] != 0 {
 		t.Errorf("read/1 = %v, want 0", found["read/1"])
 	}
 	if found["write/1"] != 2 {
 		t.Errorf("write/1 = %v, want 2", found["write/1"])
+	}
+	if current["read"] != 0 || current["write"] != 0 {
+		t.Fatalf("current = %v", current)
 	}
 }
 
@@ -188,15 +227,23 @@ rpcs in flight        rpcs   % cum % |       rpcs   % cum %
 	}
 
 	found := map[string]float64{}
+	current := map[string]float64{}
+	pending := map[string]float64{}
 	for _, o := range obs {
-		if o.MetricID != "rpcs_in_flight" {
-			t.Errorf("MetricID = %q, want rpcs_in_flight", o.MetricID)
+		switch o.MetricID {
+		case "rpcs_in_flight":
+			key := o.Labels["operation"] + "/" + o.Labels["size"]
+			if _, ok := found[key]; ok {
+				t.Fatalf("duplicate rpcs_in_flight series for %s", key)
+			}
+			found[key] = o.Value
+		case "rpcs_current":
+			current[o.Labels["operation"]] = o.Value
+		case "pending_pages":
+			pending[o.Labels["operation"]] = o.Value
+		default:
+			continue
 		}
-		key := o.Labels["operation"] + "/" + o.Labels["size"]
-		if _, ok := found[key]; ok {
-			t.Fatalf("duplicate rpcs_in_flight series for %s", key)
-		}
-		found[key] = o.Value
 	}
 	if found["modify/1"] != 5268464 {
 		t.Errorf("modify/1 = %v, want 5268464", found["modify/1"])
@@ -206,6 +253,12 @@ rpcs in flight        rpcs   % cum % |       rpcs   % cum %
 	}
 	if found["write/1"] != 0 {
 		t.Errorf("write/1 = %v, want 0", found["write/1"])
+	}
+	if current["modify"] != 0 || current["read"] != 0 || current["write"] != 0 {
+		t.Fatalf("current = %v", current)
+	}
+	if pending["read"] != 0 || pending["write"] != 0 {
+		t.Fatalf("pending = %v", pending)
 	}
 }
 
@@ -249,15 +302,23 @@ offset                rpcs   % cum % |       rpcs   % cum %
 	}
 
 	found := map[string]float64{}
+	current := map[string]float64{}
+	pending := map[string]float64{}
 	for _, o := range obs {
-		if o.MetricID != "rpcs_in_flight" {
+		switch o.MetricID {
+		case "rpcs_in_flight":
+			key := o.Labels["operation"] + "/" + o.Labels["size"]
+			if _, ok := found[key]; ok {
+				t.Fatalf("duplicate rpcs_in_flight series for %s", key)
+			}
+			found[key] = o.Value
+		case "rpcs_current":
+			current[o.Labels["operation"]] = o.Value
+		case "pending_pages":
+			pending[o.Labels["operation"]] = o.Value
+		default:
 			continue
 		}
-		key := o.Labels["operation"] + "/" + o.Labels["size"]
-		if _, ok := found[key]; ok {
-			t.Fatalf("duplicate rpcs_in_flight series for %s", key)
-		}
-		found[key] = o.Value
 	}
 
 	expected := map[string]float64{
@@ -276,6 +337,12 @@ offset                rpcs   % cum % |       rpcs   % cum %
 		if found[key] != want {
 			t.Errorf("%s = %v, want %v", key, found[key], want)
 		}
+	}
+	if current["modify"] != 0 || current["read"] != 0 || current["write"] != 0 {
+		t.Fatalf("current = %v", current)
+	}
+	if pending["read"] != 0 || pending["write"] != 0 {
+		t.Fatalf("pending = %v", pending)
 	}
 }
 
