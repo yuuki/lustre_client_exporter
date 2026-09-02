@@ -52,3 +52,59 @@ func ParseClientSingleFile(data []byte, source, fileName, component, target, typ
 		},
 	}, nil
 }
+
+// ParseClientState parses an OSC/MDC import state file.
+// It emits the observed state as value 1 and does not emit history rows.
+func ParseClientState(data []byte, source, component, target, typ string) ([]Observation, error) {
+	var current string
+	foundCurrent := false
+	fallback := ""
+
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if rest, ok := strings.CutPrefix(trimmed, "current_state:"); ok {
+			current = firstToken(rest)
+			foundCurrent = true
+			continue
+		}
+		if foundCurrent || fallback != "" {
+			continue
+		}
+		if trimmed == "" || strings.HasPrefix(trimmed, "state_history:") || strings.HasPrefix(trimmed, "- [") {
+			continue
+		}
+		fallback = firstToken(trimmed)
+	}
+
+	state := fallback
+	if foundCurrent {
+		state = current
+	}
+	if state == "" {
+		return nil, nil
+	}
+
+	return []Observation{
+		{
+			Collector:  "client",
+			Source:     source,
+			MetricID:   "target_state",
+			MetricType: Gauge,
+			Labels: map[string]string{
+				"component": component,
+				"target":    target,
+				"type":      typ,
+				"state":     state,
+			},
+			Value: 1,
+		},
+	}, nil
+}
+
+func firstToken(s string) string {
+	fields := strings.Fields(s)
+	if len(fields) == 0 {
+		return ""
+	}
+	return fields[0]
+}

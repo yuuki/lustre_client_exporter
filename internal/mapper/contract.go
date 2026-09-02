@@ -486,6 +486,12 @@ var Registry = map[string]MetricDef{
 		Type:      parser.Gauge,
 		LabelKeys: []string{"component", "target", "type"},
 	},
+	"target_state": {
+		Name:      "lustre_target_state",
+		Help:      "Current Lustre client import state. The series for the observed state is 1.",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"component", "target", "type", "state"},
+	},
 
 	// LPCC (Lustre PCC) per-cache metrics
 	"pcc_status": {
