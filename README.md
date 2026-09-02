@@ -75,9 +75,11 @@ Average client-observed RPC wait time for an operation such as `req_waittime`:
 
 ```promql
 rate(lustre_stats_seconds_sum{type="osc",operation="req_waittime"}[5m])
-/
+/ ignoring(type)
 rate(lustre_stats_total{operation="req_waittime"}[5m])
 ```
+
+Any `lustre_stats_seconds_sum` / `lustre_stats_total` ratio needs `ignoring(type)` because `lustre_stats_total` must not gain a `type` label.
 
 This value reflects RPC wait as seen by this client, not server-side queue depth.
 
@@ -97,7 +99,7 @@ The exporter uses `-v 3` because that verbose level includes NI health stats;
 
 | Source | What is collected |
 |---|---|
-| `lnetctl` | `lnetctl stats show` (required) plus `lnetctl net show -v 3` (fallback `net show`). Global counters from `stats show`, per-NID send/receive/drop from `net show`, and NI health extras when verbose output is available. |
+| `lnetctl` | `lnetctl stats show` (required) plus `lnetctl net show -v 3` (fallback `net show`). Global counters from `stats show`, per-NID send/receive/drop from `net show`, and NI health extras when verbose output is available. When `net show` returns per-NID counts, the global `send_count_total`, `receive_count_total`, and `drop_count_total` series from `stats show` are dropped to avoid duplicate series. |
 | `auto` | On success reading LNet stats from debugfs or `/proc/sys/lnet/stats` (`ReadFirstAvailable` on `LNetStatsPaths`), emits those counters and non-fatally appends NI health from `net show -v 3` only. On failure, falls back to the full `lnetctl` path above. |
 | `debugfs` | Stats and parameter files from debugfs and `/proc/sys/lnet/*` only. Never runs `lnetctl`. NI health metrics are not available. |
 

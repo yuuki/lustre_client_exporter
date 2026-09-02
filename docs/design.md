@@ -109,9 +109,19 @@ RPC histogram-like metrics add:
 - `operation`
 - `size`
 
-`lustre_rpcs_in_flight` also adds:
+These families also add `type`, with values such as `mdc` or `osc`:
 
-- `type`, with values such as `mdc` or `osc`
+- `lustre_stats_seconds_sum`
+- `lustre_rpcs_in_flight`
+- `lustre_rpcs_current`
+- `lustre_pending_pages`
+- `lustre_max_pages_per_rpc`
+- `lustre_max_rpcs_in_flight`
+- `lustre_max_mod_rpcs_in_flight`
+- `lustre_target_active`
+- `lustre_target_state`
+
+`lustre_target_state` also adds `state`.
 
 ### Client Core Metrics
 

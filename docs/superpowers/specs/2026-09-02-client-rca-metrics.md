@@ -74,9 +74,11 @@ network RTT、server 処理、server queue、LNet router queue が混ざる。
 
 ```promql
 rate(lustre_stats_seconds_sum{operation="req_waittime"}[5m])
-/
+/ ignoring(type)
 rate(lustre_stats_total{operation="req_waittime"}[5m])
 ```
+
+`lustre_stats_seconds_sum` / `lustre_stats_total` の比は、`lustre_stats_total` に `type` を付けてはならないため `ignoring(type)` が必要である。
 
 切り分けには LNet health、target state、dirty saturation、rpc 瞬間値を並べる。
 server `req_qdepth` の代替にはしない。
@@ -359,7 +361,9 @@ collector は各ファイルをこの順で読む。
 debugfs は ParamRoots に入れない。
 既存の `BasePath` は `ParamRoots[0]` と同一にして、古いテストを壊さない。
 
-発見済みの `StatsPath` / `RpcStatsPath` の ReadFile 失敗は、strict ならエラー、そうでなければ warn して続行する。
+発見済みの `StatsPath` の ReadFile 失敗は、strict ならエラー、そうでなければ warn して続行する。
+発見済みの `RpcStatsPath` が存在しない場合は、strict でも Debug で skip する。
+それ以外の `RpcStatsPath` 読み取り失敗は、strict ならエラー、そうでなければ warn する。
 ParamRoots 上の optional ファイル欠落は、strict でもエラーにしない。
 
 `lctl get_param` へは切り替えない。
