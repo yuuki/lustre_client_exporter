@@ -69,13 +69,39 @@ Reads `/sys/fs/lustre/health_check`. Emits `lustre_health_check` (1 = healthy, 0
 
 Reads client filesystem stats, capacity, tunables, RPC statistics, and LDLM callback service stats from `/proc/fs/lustre/llite/*/`, `/proc/fs/lustre/mdc/*/`, `/proc/fs/lustre/osc/*/`, and `ldlm/services/ldlm_cbd/stats`.
 
+For mdc and osc targets, the collector also reads `stats` (operation counts and latency sums) and `rpc_stats` (current in-flight RPCs and pending pages). OSC writeback uses `cur_dirty_bytes` and `max_dirty_mb`. Both imports expose RPC stream limits (`max_rpcs_in_flight`, and `max_mod_rpcs_in_flight` on MDC), `max_pages_per_rpc` when present, plus `active` and `state` (`current_state` only). All of these metrics use `component="client"`; latency sums, instantaneous RPC values, RPC limits, and import state also carry `type="mdc"` or `type="osc"`.
+
+Average client-observed RPC wait time for an operation such as `req_waittime`:
+
+```promql
+rate(lustre_stats_seconds_sum{type="osc",operation="req_waittime"}[5m])
+/ ignoring(type)
+rate(lustre_stats_total{operation="req_waittime"}[5m])
+```
+
+Any `lustre_stats_seconds_sum` / `lustre_stats_total` ratio needs `ignoring(type)` because `lustre_stats_total` must not gain a `type` label.
+
+This value reflects RPC wait as seen by this client, not server-side queue depth.
+
 ### SPTLRPC
 
 Reads `sptlrpc/encrypt_page_pools` from debugfs, falling back to `/proc/fs/lustre/sptlrpc/encrypt_page_pools`, for encryption page pool metrics.
 
 ### LNet
 
-Reads debugfs LNet stats and parameter files, falling back to `/proc/sys/lnet/*` where available. The `lnetctl` source reads `lnetctl stats show` and also uses `lnetctl net show` for per-NID send, receive, and drop counters when available.
+Reads LNet send/receive/drop counters, parameter tunables, and local network
+interface (NI) health. NI health metrics (`lustre_lnet_ni_up`,
+`lustre_lnet_ni_health`, and `lustre_lnet_ni_health_*_total`) carry a `nid`
+label and come from `lnetctl net show -v 3` when that command is available.
+The exporter uses `-v 3` because that verbose level includes NI health stats;
+`-v 4` is not required. When `-v 3` fails, it falls back to plain
+`lnetctl net show`. The exporter does not call `lnetctl peer show`.
+
+| Source | What is collected |
+|---|---|
+| `lnetctl` | `lnetctl stats show` (required) plus `lnetctl net show -v 3` (fallback `net show`). Global counters from `stats show`, per-NID send/receive/drop from `net show`, and NI health extras when verbose output is available. When `net show` returns per-NID counts, the global `send_count_total`, `receive_count_total`, and `drop_count_total` series from `stats show` are dropped to avoid duplicate series. |
+| `auto` | On success reading LNet stats from debugfs or `/proc/sys/lnet/stats` (`ReadFirstAvailable` on `LNetStatsPaths`), emits those counters and non-fatally appends NI health from `net show -v 3` only. On failure, falls back to the full `lnetctl` path above. |
+| `debugfs` | Stats and parameter files from debugfs and `/proc/sys/lnet/*` only. Never runs `lnetctl`. NI health metrics are not available. |
 
 ## Development
 

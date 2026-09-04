@@ -1,5 +1,9 @@
 snapshot_time             1681000000.123456789 secs.nsecs
-req_waittime              200 samples [usec] 5 10000 500000
+req_waittime              200 samples [usec] 5 10000 500000 1234567890
+req_qdepth                200 samples [reqs] 0 8 400
 req_active                200 samples [reqs] 1 16 800
+req_timeout               200 samples [secs] 1 64 2000
 ost_read                  1000 samples [usec] 10 50000 5000000
 ost_write                 800 samples [usec] 10 30000 3000000
+write_bytes               800 samples [bytes] 4096 1048576 838860800
+obd_ping                  50 samples [usecs] 100 2000 25000

@@ -2,7 +2,11 @@ package collector
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"io/fs"
 	"log/slog"
+	"os"
 	"path/filepath"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -20,6 +24,17 @@ var lliteSingleFiles = []string{
 	"checksum_pages", "default_easize", "lazystatfs",
 	"max_easize", "max_read_ahead_mb", "max_read_ahead_per_file_mb",
 	"max_read_ahead_whole_mb", "statahead_agl", "statahead_max", "xattr_cache",
+}
+
+// oscParamFiles are optional OSC writeback / RPC / import files under ParamRoots.
+var oscParamFiles = []string{
+	"cur_dirty_bytes", "max_dirty_mb", "max_pages_per_rpc", "max_rpcs_in_flight", "active", "state",
+}
+
+// mdcParamFiles are optional MDC RPC / import files under ParamRoots.
+// max_pages_per_rpc is attempted; skip if the file is absent.
+var mdcParamFiles = []string{
+	"max_rpcs_in_flight", "max_mod_rpcs_in_flight", "max_pages_per_rpc", "active", "state",
 }
 
 // ClientCollector reads llite, mdc, and osc metrics.
@@ -117,8 +132,7 @@ func (c *ClientCollector) collectLLite(ctx context.Context, t discovery.ClientTa
 
 	// Parse single-value files
 	for _, name := range lliteSingleFiles {
-		path := filepath.Join(t.BasePath, name)
-		data, err := c.reader.ReadFile(ctx, path)
+		data, path, err := c.readParamFile(ctx, t, name)
 		if err != nil {
 			c.logger.Debug("llite file not found", "file", name, "target", t.Name)
 			continue
@@ -137,21 +151,93 @@ func (c *ClientCollector) collectLLite(ctx context.Context, t discovery.ClientTa
 	return allObs, nil
 }
 
+func (c *ClientCollector) readParamFile(ctx context.Context, t discovery.ClientTarget, name string) ([]byte, string, error) {
+	var lastErr error
+	for _, root := range t.ParamRoots {
+		path := filepath.Join(root, name)
+		data, err := c.reader.ReadFile(ctx, path)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		return data, path, nil
+	}
+	if lastErr == nil {
+		return nil, "", fmt.Errorf("param file %s not found", name)
+	}
+	return nil, "", lastErr
+}
+
 func (c *ClientCollector) collectRPC(ctx context.Context, t discovery.ClientTarget) ([]parser.Observation, error) {
 	var allObs []parser.Observation
 
-	// Parse rpc_stats if available
+	if t.StatsPath != "" {
+		data, err := c.reader.ReadFile(ctx, t.StatsPath)
+		if err != nil {
+			if c.strict {
+				return nil, err
+			}
+			c.logger.Warn("obd stats read failed", "component", t.Component, "target", t.Name, "error", err)
+		} else {
+			obs, err := parser.ParseOBDStats(data, t.StatsPath, "client", t.Name, t.Component)
+			if err != nil {
+				if c.strict {
+					return nil, err
+				}
+				c.logger.Warn("failed to parse obd stats", "component", t.Component, "target", t.Name, "error", err)
+			} else {
+				allObs = append(allObs, obs...)
+			}
+		}
+	}
+
 	if t.RpcStatsPath != "" {
 		data, err := c.reader.ReadFile(ctx, t.RpcStatsPath)
 		if err != nil {
-			c.logger.Debug("rpc_stats not available", "component", t.Component, "target", t.Name)
+			if errors.Is(err, os.ErrNotExist) || errors.Is(err, fs.ErrNotExist) {
+				c.logger.Debug("rpc_stats not found", "component", t.Component, "target", t.Name, "path", t.RpcStatsPath, "error", err)
+			} else if c.strict {
+				return nil, err
+			} else {
+				c.logger.Warn("rpc_stats read failed", "component", t.Component, "target", t.Name, "error", err)
+			}
 		} else {
 			obs, err := parser.ParseRPCStats(data, t.RpcStatsPath, "client", t.Name, t.Component)
 			if err != nil {
+				if c.strict {
+					return nil, err
+				}
+				c.logger.Warn("failed to parse rpc stats", "component", t.Component, "target", t.Name, "error", err)
+			} else {
+				allObs = append(allObs, obs...)
+			}
+		}
+	}
+
+	paramFiles := oscParamFiles
+	if t.Component == "mdc" {
+		paramFiles = mdcParamFiles
+	}
+	for _, name := range paramFiles {
+		data, path, err := c.readParamFile(ctx, t, name)
+		if err != nil {
+			c.logger.Debug("client param file not found", "file", name, "component", t.Component, "target", t.Name)
+			continue
+		}
+		var obs []parser.Observation
+		if name == "state" {
+			obs, err = parser.ParseClientState(data, path, "client", t.Name, t.Component)
+		} else {
+			obs, err = parser.ParseClientSingleFile(data, path, name, "client", t.Name, t.Component)
+		}
+		if err != nil {
+			if c.strict {
 				return nil, err
 			}
-			allObs = append(allObs, obs...)
+			c.logger.Warn("failed to parse client param file", "file", name, "component", t.Component, "target", t.Name, "error", err)
+			continue
 		}
+		allObs = append(allObs, obs...)
 	}
 
 	return allObs, nil

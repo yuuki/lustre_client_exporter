@@ -3,6 +3,7 @@ package collector
 import (
 	"bytes"
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"strings"
@@ -52,6 +53,24 @@ func newTestClientFakeReader(t *testing.T) *reader.FakeReader {
 	loadFixture(t, r, "/proc/fs/lustre/osc/scratch-OST0000-osc-ffff0001/stats", "../testdata/osc/stats.txt")
 	loadFixture(t, r, "/proc/fs/lustre/osc/scratch-OST0000-osc-ffff0001/rpc_stats", "../testdata/osc/rpc_stats.txt")
 
+	// osc tunables and import state (virtual path is .../state, fixture is state.txt)
+	oscParamFiles := []string{
+		"cur_dirty_bytes", "max_dirty_mb", "max_pages_per_rpc", "max_rpcs_in_flight", "active",
+	}
+	for _, name := range oscParamFiles {
+		loadFixture(t, r, "/proc/fs/lustre/osc/scratch-OST0000-osc-ffff0001/"+name, "../testdata/osc/"+name)
+	}
+	loadFixture(t, r, "/proc/fs/lustre/osc/scratch-OST0000-osc-ffff0001/state", "../testdata/osc/state.txt")
+
+	// mdc tunables and import state (no max_pages_per_rpc fixture)
+	mdcParamFiles := []string{
+		"max_rpcs_in_flight", "max_mod_rpcs_in_flight", "active",
+	}
+	for _, name := range mdcParamFiles {
+		loadFixture(t, r, "/proc/fs/lustre/mdc/scratch-MDT0000-mdc-ffff0001/"+name, "../testdata/mdc/"+name)
+	}
+	loadFixture(t, r, "/proc/fs/lustre/mdc/scratch-MDT0000-mdc-ffff0001/state", "../testdata/mdc/state.txt")
+
 	return r
 }
 
@@ -83,6 +102,34 @@ func TestClientCollector(t *testing.T) {
 	}
 
 	t.Logf("collected %d metrics total", len(metrics))
+}
+
+func TestClientCollector_MDCOSCStats(t *testing.T) {
+	r := newTestClientFakeReader(t)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	c := NewClientCollector(r, discovery.DefaultPathConfig(), logger)
+	metrics, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertMetric(t, metrics, "lustre_stats_total", map[string]string{
+		"component": "client",
+		"target":    "scratch-OST0000-osc-ffff0001",
+		"operation": "req_waittime",
+	}, 200)
+	assertMetric(t, metrics, "lustre_stats_seconds_sum", map[string]string{
+		"component": "client",
+		"target":    "scratch-OST0000-osc-ffff0001",
+		"type":      "osc",
+		"operation": "req_waittime",
+	}, 0.5)
+	assertMetric(t, metrics, "lustre_stats_seconds_sum", map[string]string{
+		"component": "client",
+		"target":    "scratch-MDT0000-mdc-ffff0001",
+		"type":      "mdc",
+		"operation": "mds_getattr",
+	}, 0.1)
 }
 
 func TestClientCollector_NoTargets(t *testing.T) {
@@ -186,6 +233,28 @@ rpcs in flight        rpcs   % cum % |       rpcs   % cum %
 	}
 }
 
+func TestClientCollector_RPCCurrentScalars(t *testing.T) {
+	r := newTestClientFakeReader(t)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	c := NewClientCollector(r, discovery.DefaultPathConfig(), logger)
+	metrics, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMetric(t, metrics, "lustre_rpcs_current", map[string]string{
+		"component": "client",
+		"target":    "scratch-OST0000-osc-ffff0001",
+		"type":      "osc",
+		"operation": "write",
+	}, 5)
+	assertMetric(t, metrics, "lustre_pending_pages", map[string]string{
+		"component": "client",
+		"target":    "scratch-OST0000-osc-ffff0001",
+		"type":      "osc",
+		"operation": "write",
+	}, 120)
+}
+
 func TestClientCollector_RPCStatsGSICompatibleLabels(t *testing.T) {
 	const target = "nonexistent-OST9999-osc-0000000000000000"
 	r := reader.NewFakeReader()
@@ -272,6 +341,83 @@ func TestClientCollector_StrictReturnsErrorOnTargetFailure(t *testing.T) {
 	_, err := c.Collect(context.Background())
 	if err == nil {
 		t.Fatal("expected strict client collector to return target read error")
+	}
+}
+
+func TestClientCollector_LLiteParamsFromSysFSWhenStatsInDebugFS(t *testing.T) {
+	r := reader.NewFakeReader()
+	r.Globs["/sys/kernel/debug/lustre/llite/*/stats"] = []string{
+		"/sys/kernel/debug/lustre/llite/scratch-ffff0001/stats",
+	}
+	loadFixture(t, r, "/sys/kernel/debug/lustre/llite/scratch-ffff0001/stats", "../testdata/llite/stats.txt")
+	loadFixture(t, r, "/sys/fs/lustre/llite/scratch-ffff0001/blocksize", "../testdata/llite/blocksize")
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	c := NewClientCollector(r, discovery.DefaultPathConfig(), logger)
+	metrics, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMetric(t, metrics, "lustre_blocksize_bytes", map[string]string{
+		"component": "client",
+		"target":    "scratch-ffff0001",
+	}, 4194304)
+}
+
+func TestClientCollector_StrictReturnsErrorOnDiscoveredStatsRead(t *testing.T) {
+	r := newTestClientFakeReader(t)
+	r.Errors["/proc/fs/lustre/mdc/scratch-MDT0000-mdc-ffff0001/stats"] = errors.New("permission denied")
+	c := NewClientCollectorWithStrict(r, discovery.DefaultPathConfig(), slog.New(slog.NewTextHandler(os.Stderr, nil)), true)
+	if _, err := c.Collect(context.Background()); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestClientCollector_MissingSiblingRPCStatsIsNotStrictError(t *testing.T) {
+	r := reader.NewFakeReader()
+	r.Globs["/proc/fs/lustre/mdc/*/stats"] = []string{
+		"/proc/fs/lustre/mdc/scratch-MDT0000-mdc-ffff0001/stats",
+	}
+	r.Globs["/proc/fs/lustre/osc/*/stats"] = []string{
+		"/proc/fs/lustre/osc/scratch-OST0000-osc-ffff0001/stats",
+	}
+	loadFixture(t, r, "/proc/fs/lustre/mdc/scratch-MDT0000-mdc-ffff0001/stats", "../testdata/mdc/stats.txt")
+	loadFixture(t, r, "/proc/fs/lustre/osc/scratch-OST0000-osc-ffff0001/stats", "../testdata/osc/stats.txt")
+
+	c := NewClientCollectorWithStrict(r, discovery.DefaultPathConfig(), slog.New(slog.NewTextHandler(os.Stderr, nil)), true)
+	metrics, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(metrics) == 0 {
+		t.Fatal("expected stats metrics when sibling rpc_stats is absent")
+	}
+}
+
+func TestClientCollector_WritebackAndState(t *testing.T) {
+	r := newTestClientFakeReader(t)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	c := NewClientCollector(r, discovery.DefaultPathConfig(), logger)
+	metrics, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	osc := "scratch-OST0000-osc-ffff0001"
+	mdc := "scratch-MDT0000-mdc-ffff0001"
+	assertMetric(t, metrics, "lustre_osc_dirty_bytes", map[string]string{"component": "client", "target": osc}, 1048576)
+	assertMetric(t, metrics, "lustre_osc_max_dirty_bytes", map[string]string{"component": "client", "target": osc}, 33554432)
+	assertMetric(t, metrics, "lustre_max_rpcs_in_flight", map[string]string{"component": "client", "target": osc, "type": "osc"}, 8)
+	assertMetric(t, metrics, "lustre_max_mod_rpcs_in_flight", map[string]string{"component": "client", "target": mdc, "type": "mdc"}, 16)
+	assertMetric(t, metrics, "lustre_target_active", map[string]string{"component": "client", "target": osc, "type": "osc"}, 1)
+	assertMetric(t, metrics, "lustre_target_state", map[string]string{"component": "client", "target": osc, "type": "osc", "state": "FULL"}, 1)
+}
+
+func TestClientCollector_MissingOptionalTunableIsNotStrictError(t *testing.T) {
+	r := newTestClientFakeReader(t)
+	delete(r.Files, "/proc/fs/lustre/osc/scratch-OST0000-osc-ffff0001/cur_dirty_bytes")
+	c := NewClientCollectorWithStrict(r, discovery.DefaultPathConfig(), slog.New(slog.NewTextHandler(os.Stderr, nil)), true)
+	if _, err := c.Collect(context.Background()); err != nil {
+		t.Fatal(err)
 	}
 }
 

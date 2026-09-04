@@ -3,6 +3,7 @@ package reader
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 )
 
@@ -32,7 +33,7 @@ func (r *FakeReader) ReadFile(ctx context.Context, path string) ([]byte, error) 
 	}
 	data, ok := r.Files[path]
 	if !ok {
-		return nil, fmt.Errorf("fake: file not found: %s", path)
+		return nil, fmt.Errorf("fake: file not found: %s: %w", path, os.ErrNotExist)
 	}
 	return data, nil
 }

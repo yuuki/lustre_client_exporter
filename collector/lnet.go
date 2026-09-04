@@ -67,6 +67,8 @@ func (c *LNetCollector) Collect(ctx context.Context) ([]prometheus.Metric, error
 			if err != nil {
 				return nil, err
 			}
+		} else {
+			obs = append(obs, c.collectSupplementalNetNI(ctx)...)
 		}
 		allObs = append(allObs, obs...)
 	}
@@ -99,32 +101,56 @@ func (c *LNetCollector) collectFromLNetCtl(ctx context.Context) ([]parser.Observ
 		return nil, err
 	}
 
-	netData, err := c.reader.RunCommand(ctx, c.lnetctlBin, "net", "show")
+	netData, err := c.reader.RunCommand(ctx, c.lnetctlBin, "net", "show", "-v", "3")
 	if err != nil {
-		c.logger.Debug("lnetctl net show not available", "error", err)
-		return obs, nil
+		c.logger.Debug("lnetctl net show -v 3 not available", "error", err)
+		netData, err = c.reader.RunCommand(ctx, c.lnetctlBin, "net", "show")
+		if err != nil {
+			c.logger.Debug("lnetctl net show not available", "error", err)
+			return obs, nil
+		}
 	}
-	netObs, err := parser.ParseLNetCtlNetStats(netData, "lnetctl net show")
+	countObs, err := parser.ParseLNetCtlNetStats(netData, "lnetctl net show")
 	if err != nil {
 		c.logger.Warn("failed to parse lnetctl net show", "error", err)
 		return obs, nil
 	}
-	if len(netObs) == 0 {
-		return obs, nil
+	niObs, err := parser.ParseLNetCtlNetNI(netData, "lnetctl net show")
+	if err != nil {
+		c.logger.Warn("failed to parse lnetctl net show NI", "error", err)
+		niObs = nil
 	}
+	if len(countObs) > 0 {
+		obs = dropGlobalLNetCountStats(obs)
+		obs = append(obs, countObs...)
+	}
+	return append(obs, niObs...), nil
+}
 
-	obs = dropGlobalLNetCountStats(obs)
-	return append(obs, netObs...), nil
+func (c *LNetCollector) collectSupplementalNetNI(ctx context.Context) []parser.Observation {
+	netData, err := c.reader.RunCommand(ctx, c.lnetctlBin, "net", "show", "-v", "3")
+	if err != nil {
+		c.logger.Debug("lnetctl net show -v 3 not available", "error", err)
+		netData, err = c.reader.RunCommand(ctx, c.lnetctlBin, "net", "show")
+		if err != nil {
+			c.logger.Debug("lnetctl net show not available", "error", err)
+			return nil
+		}
+	}
+	niObs, err := parser.ParseLNetCtlNetNI(netData, "lnetctl net show")
+	if err != nil {
+		c.logger.Warn("failed to parse lnetctl net show NI", "error", err)
+		return nil
+	}
+	return niObs
 }
 
 func dropGlobalLNetCountStats(obs []parser.Observation) []parser.Observation {
 	filtered := make([]parser.Observation, 0, len(obs))
 	for _, o := range obs {
-		if len(o.Labels) == 0 {
-			switch o.MetricID {
-			case "send_count_total", "receive_count_total", "drop_count_total":
-				continue
-			}
+		switch o.MetricID {
+		case "send_count_total", "receive_count_total", "drop_count_total":
+			continue
 		}
 		filtered = append(filtered, o)
 	}

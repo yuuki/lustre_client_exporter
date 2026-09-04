@@ -138,6 +138,26 @@ type lnetCtlNetShow struct {
 	} `json:"net" yaml:"net"`
 }
 
+type healthStats struct {
+	HealthValue float64 `yaml:"health value"`
+	Interrupts  float64 `yaml:"interrupts"`
+	Dropped     float64 `yaml:"dropped"`
+	Aborted     float64 `yaml:"aborted"`
+	NoRoute     float64 `yaml:"no route"`
+	Timeouts    float64 `yaml:"timeouts"`
+	Error       float64 `yaml:"error"`
+}
+
+type lnetCtlNetNIShow struct {
+	Net []struct {
+		LocalNIs []struct {
+			NID         string       `json:"nid" yaml:"nid"`
+			Status      string       `json:"status" yaml:"status"`
+			HealthStats *healthStats `json:"health stats" yaml:"health stats"`
+		} `json:"local NI(s)" yaml:"local NI(s)"`
+	} `json:"net" yaml:"net"`
+}
+
 // unmarshalJSONOrYAML tries YAML first (lnetctl default), then JSON.
 func unmarshalJSONOrYAML(data []byte, dest any, label string) error {
 	if err := yaml.Unmarshal(data, dest); err != nil {
@@ -210,6 +230,105 @@ func ParseLNetCtlNetStats(data []byte, source string) ([]Observation, error) {
 					MetricType: Counter,
 					Labels:     labels,
 					Value:      ni.Statistics.DropCount,
+				},
+			)
+		}
+	}
+
+	return observations, nil
+}
+
+// ParseLNetCtlNetNI parses local NI status and health from `lnetctl net show`.
+func ParseLNetCtlNetNI(data []byte, source string) ([]Observation, error) {
+	var netShow lnetCtlNetNIShow
+	if err := unmarshalJSONOrYAML(data, &netShow, "lnetctl net show NI"); err != nil {
+		return nil, err
+	}
+
+	var observations []Observation
+	for _, net := range netShow.Net {
+		for _, ni := range net.LocalNIs {
+			if ni.NID == "" {
+				continue
+			}
+			labels := lnetBaseLabels()
+			labels["nid"] = ni.NID
+
+			if ni.Status != "" {
+				up := 0.0
+				if ni.Status == "up" || ni.Status == "UP" {
+					up = 1
+				}
+				observations = append(observations, Observation{
+					Collector:  "lnet",
+					Source:     source,
+					MetricID:   "lnet_ni_up",
+					MetricType: Gauge,
+					Labels:     labels,
+					Value:      up,
+				})
+			}
+
+			if ni.HealthStats == nil {
+				continue
+			}
+			hs := ni.HealthStats
+			observations = append(observations,
+				Observation{
+					Collector:  "lnet",
+					Source:     source,
+					MetricID:   "lnet_ni_health",
+					MetricType: Gauge,
+					Labels:     labels,
+					Value:      hs.HealthValue,
+				},
+				Observation{
+					Collector:  "lnet",
+					Source:     source,
+					MetricID:   "lnet_ni_health_interrupts_total",
+					MetricType: Counter,
+					Labels:     labels,
+					Value:      hs.Interrupts,
+				},
+				Observation{
+					Collector:  "lnet",
+					Source:     source,
+					MetricID:   "lnet_ni_health_dropped_total",
+					MetricType: Counter,
+					Labels:     labels,
+					Value:      hs.Dropped,
+				},
+				Observation{
+					Collector:  "lnet",
+					Source:     source,
+					MetricID:   "lnet_ni_health_aborted_total",
+					MetricType: Counter,
+					Labels:     labels,
+					Value:      hs.Aborted,
+				},
+				Observation{
+					Collector:  "lnet",
+					Source:     source,
+					MetricID:   "lnet_ni_health_no_route_total",
+					MetricType: Counter,
+					Labels:     labels,
+					Value:      hs.NoRoute,
+				},
+				Observation{
+					Collector:  "lnet",
+					Source:     source,
+					MetricID:   "lnet_ni_health_timeouts_total",
+					MetricType: Counter,
+					Labels:     labels,
+					Value:      hs.Timeouts,
+				},
+				Observation{
+					Collector:  "lnet",
+					Source:     source,
+					MetricID:   "lnet_ni_health_errors_total",
+					MetricType: Counter,
+					Labels:     labels,
+					Value:      hs.Error,
 				},
 			)
 		}

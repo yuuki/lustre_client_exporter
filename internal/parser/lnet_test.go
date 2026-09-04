@@ -150,6 +150,73 @@ func TestParseLNetCtlNetStats_YAML(t *testing.T) {
 	}
 }
 
+func TestParseLNetCtlNetNI_Verbose(t *testing.T) {
+	data, err := os.ReadFile("../../testdata/lnet/lnetctl_net_show_verbose.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	obs, err := ParseLNetCtlNetNI(data, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	up := map[string]float64{}
+	health := map[string]float64{}
+	for _, o := range obs {
+		switch o.MetricID {
+		case "lnet_ni_up":
+			up[o.Labels["nid"]] = o.Value
+		case "lnet_ni_health":
+			health[o.Labels["nid"]] = o.Value
+		}
+	}
+	if up["0@lo"] != 1 || up["10.200.200.54@o2ib"] != 0 {
+		t.Fatalf("up = %v", up)
+	}
+	if health["0@lo"] != 0 || health["10.200.200.54@o2ib"] != 800 {
+		t.Fatalf("health = %v", health)
+	}
+	wantCounters := map[string]float64{
+		"lnet_ni_health_interrupts_total": 1,
+		"lnet_ni_health_dropped_total":    136,
+		"lnet_ni_health_aborted_total":    2,
+		"lnet_ni_health_no_route_total":   3,
+		"lnet_ni_health_timeouts_total":   4,
+		"lnet_ni_health_errors_total":     5,
+	}
+	for id, want := range wantCounters {
+		var got float64
+		var found bool
+		for _, o := range obs {
+			if o.MetricID == id && o.Labels["nid"] == "10.200.200.54@o2ib" {
+				got = o.Value
+				found = true
+			}
+		}
+		if !found || got != want {
+			t.Fatalf("%s = %v found=%v want %v", id, got, found, want)
+		}
+	}
+}
+
+func TestParseLNetCtlNetNI_StatusWithoutHealth(t *testing.T) {
+	data, err := os.ReadFile("../../testdata/lnet/lnetctl_net_show.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	obs, err := ParseLNetCtlNetNI(data, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(obs) != 2 {
+		t.Fatalf("got %d, want 2 up gauges", len(obs))
+	}
+	for _, o := range obs {
+		if o.MetricID != "lnet_ni_up" {
+			t.Fatalf("unexpected %s", o.MetricID)
+		}
+	}
+}
+
 func TestParseLNetParam(t *testing.T) {
 	tests := []struct {
 		param    string

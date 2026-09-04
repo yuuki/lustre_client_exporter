@@ -251,6 +251,56 @@ var Registry = map[string]MetricDef{
 		LabelKeys: []string{"component", "target"},
 	},
 
+	// LNet local NI health (lnetctl net show -v 3)
+	"lnet_ni_up": {
+		Name:      "lustre_lnet_ni_up",
+		Help:      "Whether an LNet local network interface is up (1 = up, 0 = down).",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"component", "target", "nid"},
+	},
+	"lnet_ni_health": {
+		Name:      "lustre_lnet_ni_health",
+		Help:      "LNet local network interface health value (maximum 1000).",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"component", "target", "nid"},
+	},
+	"lnet_ni_health_interrupts_total": {
+		Name:      "lustre_lnet_ni_health_interrupts_total",
+		Help:      "Total number of LNet local NI health interrupts.",
+		Type:      parser.Counter,
+		LabelKeys: []string{"component", "target", "nid"},
+	},
+	"lnet_ni_health_dropped_total": {
+		Name:      "lustre_lnet_ni_health_dropped_total",
+		Help:      "Total number of LNet local NI health drops.",
+		Type:      parser.Counter,
+		LabelKeys: []string{"component", "target", "nid"},
+	},
+	"lnet_ni_health_aborted_total": {
+		Name:      "lustre_lnet_ni_health_aborted_total",
+		Help:      "Total number of LNet local NI health aborted operations.",
+		Type:      parser.Counter,
+		LabelKeys: []string{"component", "target", "nid"},
+	},
+	"lnet_ni_health_no_route_total": {
+		Name:      "lustre_lnet_ni_health_no_route_total",
+		Help:      "Total number of LNet local NI health no-route events.",
+		Type:      parser.Counter,
+		LabelKeys: []string{"component", "target", "nid"},
+	},
+	"lnet_ni_health_timeouts_total": {
+		Name:      "lustre_lnet_ni_health_timeouts_total",
+		Help:      "Total number of LNet local NI health timeouts.",
+		Type:      parser.Counter,
+		LabelKeys: []string{"component", "target", "nid"},
+	},
+	"lnet_ni_health_errors_total": {
+		Name:      "lustre_lnet_ni_health_errors_total",
+		Help:      "Total number of LNet local NI health errors.",
+		Type:      parser.Counter,
+		LabelKeys: []string{"component", "target", "nid"},
+	},
+
 	// Client core metrics (llite)
 	"blocksize_bytes": {
 		Name:      "lustre_blocksize_bytes",
@@ -342,6 +392,12 @@ var Registry = map[string]MetricDef{
 		Type:      parser.Counter,
 		LabelKeys: []string{"component", "target", "operation"},
 	},
+	"stats_seconds_sum": {
+		Name:      "lustre_stats_seconds_sum",
+		Help:      "Sum of Lustre client stats values whose source unit is a time unit, converted to seconds.",
+		Type:      parser.Counter,
+		LabelKeys: []string{"component", "target", "type", "operation"},
+	},
 	"ldlm_cbd_stats": {
 		Name:      "lustre_ldlm_cbd_stats",
 		Help:      "Gives information about LDLM Callback service.",
@@ -429,6 +485,62 @@ var Registry = map[string]MetricDef{
 		Help:      "RPC offset distribution by bucket.",
 		Type:      parser.Counter,
 		LabelKeys: []string{"component", "target", "operation", "size"},
+	},
+	"rpcs_current": {
+		Name:      "lustre_rpcs_current",
+		Help:      "Number of RPCs currently in flight on a Lustre client import.",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"component", "target", "type", "operation"},
+	},
+	"pending_pages": {
+		Name:      "lustre_pending_pages",
+		Help:      "Number of pages waiting to be sent on a Lustre client import.",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"component", "target", "type", "operation"},
+	},
+
+	// OSC / MDC single-value files
+	"osc_dirty_bytes": {
+		Name:      "lustre_osc_dirty_bytes",
+		Help:      "Current dirty bytes cached on a Lustre OSC.",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"component", "target"},
+	},
+	"osc_max_dirty_bytes": {
+		Name:      "lustre_osc_max_dirty_bytes",
+		Help:      "Maximum dirty bytes allowed on a Lustre OSC.",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"component", "target"},
+	},
+	"max_pages_per_rpc": {
+		Name:      "lustre_max_pages_per_rpc",
+		Help:      "Maximum pages allowed per RPC on a Lustre client import.",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"component", "target", "type"},
+	},
+	"max_rpcs_in_flight": {
+		Name:      "lustre_max_rpcs_in_flight",
+		Help:      "Maximum RPCs allowed in flight on a Lustre client import.",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"component", "target", "type"},
+	},
+	"max_mod_rpcs_in_flight": {
+		Name:      "lustre_max_mod_rpcs_in_flight",
+		Help:      "Maximum modify RPCs allowed in flight on a Lustre MDC import.",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"component", "target", "type"},
+	},
+	"target_active": {
+		Name:      "lustre_target_active",
+		Help:      "Whether a Lustre client import is active (1 = active, 0 = inactive).",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"component", "target", "type"},
+	},
+	"target_state": {
+		Name:      "lustre_target_state",
+		Help:      "Current Lustre client import state. The series for the observed state is 1.",
+		Type:      parser.Gauge,
+		LabelKeys: []string{"component", "target", "type", "state"},
 	},
 
 	// LPCC (Lustre PCC) per-cache metrics
