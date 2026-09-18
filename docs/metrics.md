@@ -77,10 +77,11 @@ When a PromQL example omits `instance`, add it in a multi-node query.
 `lustre_health_check` is a gauge from this node's
 `/sys/fs/lustre/health_check`. The parser treats the literal string
 `healthy` as `1` and every other value, including empty or
-`NOT HEALTHY`, as `0`. That encoding matches
+`NOT HEALTHY`, as `0`. The strings match
 [Lustre Health Checks](https://wiki.lustre.org/Lustre_Health_Checks):
 `lctl get_param health_check` returns `healthy`, or `NOT HEALTHY` with
-a reason such as LBUG or a dead import. Labels are
+a reason such as LBUG or a dead import. The `1`/`0` encoding is this
+exporter's. Labels are
 `component="health"` and `target="lustre"`. `target="lustre"` is a
 fixed string, not "the whole filesystem is healthy."
 
@@ -130,9 +131,12 @@ A client-side utilization sketch is:
 Those ratios can look healthy while writes fail: quota, grant, a single
 full OST behind an aggregated statfs, or a stale lazy statfs. If
 `lustre_lazystatfs_enabled` is `1`, treat the capacity gauges as
-potentially stale by design. Use server OSD space metrics when you have
-them; [Lustre Health Checks](https://wiki.lustre.org/Lustre_Health_Checks)
-uses `lfs df` / `lfs df -i` for that view.
+potentially stale by design. The llite `kbytes*` and `files*` files
+this exporter copies are one aggregated client view.
+[Lustre Health Checks](https://wiki.lustre.org/Lustre_Health_Checks)
+uses `lfs df` and `lfs df -i` for the per-target breakdown (an OST at
+100%, inodes exhausted on an MDT). That is still a client command, not
+the server OSD files this exporter omits.
 
 ## Client I/O
 
@@ -389,10 +393,12 @@ OSC and MDC single-value files supply the current writeback cache, the
 configured RPC ceilings, and whether the import is marked active.
 Missing files are skipped even in strict mode. Operations Manual
 examples set `osc.*.max_dirty_mb` with `lctl`
-([§13.12.3](https://doc.lustre.org/lustre_manual.xhtml)). The
-`osc.*.import` dump in the
-[Lustre administration slides](https://wiki.lustre.org/images/e/e4/LUG-2010-tricksRev.pdf)
-shows `state: FULL` as the connected import state.
+([§13.12.3](https://doc.lustre.org/lustre_manual.xhtml)). Official
+`osc.*.import` dumps in the
+[LUG 2010 talk](https://wiki.lustre.org/images/e/e4/LUG-2010-tricksRev.pdf)
+and the [2009 recovery overview](https://wiki.lustre.org/images/c/cd/RecoveryTalk_2009.pdf)
+show `state: FULL` when the import is connected. This exporter does
+not parse that dump; it reads the sibling `state` file.
 
 | Metric | Labels | Meaning |
 |---|---|---|
@@ -464,8 +470,10 @@ userspace daemon and not a lock-namespace inventory. The only label is
 `req_waittime`, `req_qdepth`, `req_active`, `reqbuf_avail`,
 `ldlm_bl_callback`, `ldlm_cp_callback`, and `ldlm_gl_callback`.
 The [Lustre internals architecture notes](https://wiki.lustre.org/images/e/e5/LustreInternals_Architecture.pdf)
-describe those callbacks as completion, blocking, and glimpse ASTs
-handled by the client lock-callback thread (`ldlm_cbd`).
+name those as completion, blocking, and glimpse callbacks on the
+client lock-callback thread (`ldlm_cbd`). Operations Manual
+[§38.1.2](https://doc.lustre.org/lustre_manual.xhtml) lists the same
+three lock callbacks as reasons a server may evict a client.
 
 ```promql
 sum by (operation) (
@@ -835,17 +843,21 @@ Lustre: the application, local CPU, or I/O that never left the node.
   and [PDF](https://doc.lustre.org/lustre_manual.pdf): `lctl` parameters
   (§13.12.3), reserved disk space (§13.15), LNet Health (§16.5),
   checksums (§23.5.1), quotas (§25), Persistent Client Cache
-  (chapter 27).
+  (chapter 27), client eviction lock callbacks (§38.1.2).
 - [Lustre Health Checks](https://wiki.lustre.org/Lustre_Health_Checks):
-  `health_check`, `lfs df`, `lnetctl net show`.
+  `health_check` strings, `lfs df` / `lfs df -i`, `lnetctl net show`.
 - [Lustre I/O Monitoring](https://wiki.lustre.org/Lustre_IO_Monitoring):
   `llite.*.stats`, `osc.*.rpc_stats`, `max_rpcs_in_flight`.
 - [Lustre Monitoring and Statistics Guide](https://wiki.lustre.org/Lustre_Monitoring_and_Statistics_Guide):
-  server-side stats this exporter does not collect.
+  mostly server-side stats (`obdfilter.*.job_stats`, `mdt.*.job_stats`,
+  and related files) this exporter does not collect.
 - [LNet Router Config Guide](https://wiki.lustre.org/LNet_Router_Config_Guide):
-  `lnetctl net show` local NI status and counters.
+  `lnetctl net show` local NI `status` and send/recv/drop counters.
 - [Lustre internals: architecture](https://wiki.lustre.org/images/e/e5/LustreInternals_Architecture.pdf):
   LDLM completion, blocking, and glimpse callbacks (`ldlm_cbd`).
+- [LUG 2010 talk](https://wiki.lustre.org/images/e/e4/LUG-2010-tricksRev.pdf)
+  and [2009 recovery overview](https://wiki.lustre.org/images/c/cd/RecoveryTalk_2009.pdf):
+  `osc.*.import` / `mdc.*.import` dump with `state: FULL`.
 - [GSI-HPC/lustre_exporter](https://github.com/GSI-HPC/lustre_exporter):
   public metric names and labels this project stays compatible with.
 - [Prometheus querying operators](https://prometheus.io/docs/prometheus/latest/querying/operators/):
