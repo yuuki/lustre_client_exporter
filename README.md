@@ -103,6 +103,11 @@ The exporter uses `-v 3` because that verbose level includes NI health stats;
 | `auto` | On success reading LNet stats from debugfs or `/proc/sys/lnet/stats` (`ReadFirstAvailable` on `LNetStatsPaths`), emits those counters and non-fatally appends NI health from `net show -v 3` only. On failure, falls back to the full `lnetctl` path above. |
 | `debugfs` | Stats and parameter files from debugfs and `/proc/sys/lnet/*` only. Never runs `lnetctl`. NI health metrics are not available. |
 
+## Metrics
+
+See [docs/metrics.md](docs/metrics.md) for the meaning and operational use of
+each public metric family, including PromQL examples for client-side RCA.
+
 ## Development
 
 ```sh
