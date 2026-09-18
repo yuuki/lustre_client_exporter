@@ -10,7 +10,13 @@ optionally `lnetctl` and `lpcc`. Public names and labels follow
 [GSI-HPC/lustre_exporter](https://github.com/GSI-HPC/lustre_exporter) where
 the same client-side quantity already exists. The implementation itself is
 original. The single source of truth for names, types, help text, and label
-keys is `internal/mapper/contract.go`.
+keys is `internal/mapper/contract.go`. Lustre parameter and command
+semantics below follow the
+[Lustre Operations Manual](https://doc.lustre.org/lustre_manual.xhtml)
+and the [Lustre wiki](https://wiki.lustre.org/); PromQL matching follows
+the [Prometheus operator](https://prometheus.io/docs/prometheus/latest/querying/operators/)
+and [function](https://prometheus.io/docs/prometheus/latest/querying/functions/)
+docs.
 
 Server-side Lustre data is intentionally out of scope: OST, MDT, MDS, MGS,
 quota, recovery, exports, changelog, jobstats, and server BRW or service
@@ -24,8 +30,11 @@ recovery.
 Four collectors are enabled by default: `client`, `lnet`, `health`, and
 `sptlrpc`. The LPCC collector is off unless you pass `-collector.lpcc`.
 
-The HTTP handler uses a dedicated `prometheus.Registry`. The usual Go
-runtime and process families (`go_*`, `process_*`) are therefore absent.
+The HTTP handler uses a dedicated `prometheus.Registry`. A custom
+registry starts empty, unlike the default registerer, which already
+includes Go runtime and process collectors
+([client_golang](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus)).
+The usual `go_*` and `process_*` families are therefore absent.
 Scrape quality is covered by `lustre_scrape_*` and
 `lustre_exporter_scrape_duration_seconds`, described at the end of this
 document.
@@ -68,9 +77,12 @@ When a PromQL example omits `instance`, add it in a multi-node query.
 `lustre_health_check` is a gauge from this node's
 `/sys/fs/lustre/health_check`. The parser treats the literal string
 `healthy` as `1` and every other value, including empty or
-`NOT HEALTHY`, as `0`. Labels are `component="health"` and
-`target="lustre"`. `target="lustre"` is a fixed string, not "the whole
-filesystem is healthy."
+`NOT HEALTHY`, as `0`. That encoding matches
+[Lustre Health Checks](https://wiki.lustre.org/Lustre_Health_Checks):
+`lctl get_param health_check` returns `healthy`, or `NOT HEALTHY` with
+a reason such as LBUG or a dead import. Labels are
+`component="health"` and `target="lustre"`. `target="lustre"` is a
+fixed string, not "the whole filesystem is healthy."
 
 This is Lustre's own per-node health state, not cluster, fabric, MDS, or
 OSS health, and not a performance SLO. If the gauge is `0`, look next at
@@ -97,7 +109,13 @@ The client collector reads the single-value llite files under each mount
 
 The exporter copies those files. It does not apply a reserved-space
 model, quota, or OST grant. `available` versus `free` is whatever the
-kernel reported in those two files.
+kernel reported in those two files, the same distinction
+[`statfs(2)`](https://man7.org/linux/man-pages/man2/statfs.2.html) makes
+between `f_bavail` and `f_bfree`. Server-side ldiskfs reserved space is
+a different quantity, documented in Operations Manual
+[§13.15](https://doc.lustre.org/lustre_manual.xhtml). Quota and grant
+limits are also server-side
+([§25](https://doc.lustre.org/lustre_manual.xhtml)).
 
 A client-side utilization sketch is:
 
@@ -113,7 +131,8 @@ Those ratios can look healthy while writes fail: quota, grant, a single
 full OST behind an aggregated statfs, or a stale lazy statfs. If
 `lustre_lazystatfs_enabled` is `1`, treat the capacity gauges as
 potentially stale by design. Use server OSD space metrics when you have
-them.
+them; [Lustre Health Checks](https://wiki.lustre.org/Lustre_Health_Checks)
+uses `lfs df` / `lfs df -i` for that view.
 
 ## Client I/O
 
@@ -122,6 +141,9 @@ count, lifetime min size, lifetime max size, and byte sum. The mapping
 is used for llite `stats` and again for MDC and OSC `stats` when those
 files contain the same line names. The public names are shared. The only
 distinguisher is `target`. There is no `type` label.
+[Lustre I/O Monitoring](https://wiki.lustre.org/Lustre_IO_Monitoring)
+treats `llite.*.stats` as the application-facing client layer and
+`osc.*.rpc_stats` as how that I/O is packaged into RPCs.
 
 The same public names are used for both planes. The fixtures already
 emit `write_bytes` on an llite mount and again on an OSC import. Adding
@@ -161,9 +183,10 @@ sum by (instance, target) (
 | `lustre_write_maximum_size_bytes` | Gauge | Lifetime maximum write size | I/O size characterization since reset. |
 
 These counts are not block-layer I/O and will not necessarily match
-`node_exporter` disk stats. A cached write can increment an llite series
-before an OSC RPC leaves the node; writeback can increment an OSC series
-after the application has returned.
+[node_exporter](https://github.com/prometheus/node_exporter) disk stats.
+A cached write can increment an llite series before an OSC RPC leaves
+the node; writeback can increment an OSC series after the application
+has returned.
 
 ## Operation counts and client-observed latency
 
@@ -204,10 +227,14 @@ this family. llite never emits it. Labels are `component`, `target`,
 `type`, and `operation`.
 
 The mean over a window is the ratio of the two **rates**, with
-`ignoring(type)` because only the numerator has `type`. Matching still
-requires `target` (and `instance`, `component`, `operation`). That is
-enough to keep one OSC import from joining a different MDC import unless
-the two share a `target` string.
+`ignoring(type)` because only the numerator has `type`.
+[PromQL vector matching](https://prometheus.io/docs/prometheus/latest/querying/operators/)
+requires an identical label set unless `ignoring` or `on` is used;
+[rate()](https://prometheus.io/docs/prometheus/latest/querying/functions/#rate)
+must run on each counter before the divide.
+Matching still requires `target` (and `instance`, `component`,
+`operation`). That is enough to keep one OSC import from joining a
+different MDC import unless the two share a `target` string.
 
 ```promql
 rate(lustre_stats_seconds_sum{type="osc",operation="req_waittime"}[5m])
@@ -231,6 +258,10 @@ server-side queue depth, and it is not a percentile. Network RTT, server
 processing, server queues, and LNet router delay are folded together. A
 rising `req_waittime` mean tells you that this client is waiting longer
 on that import. It does not prove that an OSS thread pool is saturated.
+Server queue depth lives in OSS/MDS service stats, which
+[Lustre I/O Monitoring](https://wiki.lustre.org/Lustre_IO_Monitoring)
+places under `obdfilter.*.brw_stats` and related server files, outside
+this exporter.
 
 ## Client tunables
 
@@ -253,7 +284,11 @@ are skipped even in strict mode.
 
 These are configuration observations. They are a poor anomaly detector
 and a good drift detector: the interesting question is usually "why is
-this node different from the rest of the rack?"
+this node different from the rest of the rack?" Operations Manual
+[§23.5.1](https://doc.lustre.org/lustre_manual.xhtml) documents
+`llite.*.checksum_pages`. Read-ahead and other llite tunables are
+changed with `lctl set_param` as in
+[§13.12.3](https://doc.lustre.org/lustre_manual.xhtml).
 
 ## MDC and OSC RPC
 
@@ -262,14 +297,18 @@ found via `stats`, `rpc_stats` is the sibling of that `stats` file and
 is not replaced by a later glob in another tree. The standalone
 `rpc_stats` glob only adds imports that had no `stats` hit, or fills an
 empty path. A missing `rpc_stats` is skipped even in strict mode.
+[Lustre I/O Monitoring](https://wiki.lustre.org/Lustre_IO_Monitoring)
+describes the `pages per rpc` and `rpcs in flight` histograms from
+`lctl get_param osc.*.rpc_stats`.
 
 ### Historical RPC distributions
 
 Three families record bucketed history from the `pages per rpc`,
 `rpcs in flight`, and `offset` sections. The `size` label is the bucket
 key from the file, not a measured byte count. The buckets are discrete
-counts, not Prometheus `le` histograms. `histogram_quantile` is not
-available from this exporter.
+counts, not Prometheus `le` histograms, so
+[`histogram_quantile`](https://prometheus.io/docs/practices/histograms/)
+is not available from this exporter.
 
 | Metric | Type | Label keys | Meaning |
 |---|---|---|---|
@@ -309,7 +348,11 @@ reads, not a send backlog. For writeback RCA use
 
 `lustre_max_rpcs_in_flight` is one published ceiling per import. The
 exporter does not encode whether Lustre shares that ceiling across
-read, write, and DIO. Comparing a single operation to the ceiling can
+read, write, and DIO.
+[Lustre I/O Monitoring](https://wiki.lustre.org/Lustre_IO_Monitoring)
+treats a `rpcs in flight` histogram piled at the maximum as the client
+using its RPC pipeline, and a depth of 1 as a reason to raise
+`max_rpcs_in_flight`. Comparing a single operation to the ceiling can
 show headroom while the import is already at the limit. A conservative
 check sums the non-modify operations on that import:
 
@@ -344,7 +387,12 @@ ceiling; look at import state or locks.
 
 OSC and MDC single-value files supply the current writeback cache, the
 configured RPC ceilings, and whether the import is marked active.
-Missing files are skipped even in strict mode.
+Missing files are skipped even in strict mode. Operations Manual
+examples set `osc.*.max_dirty_mb` with `lctl`
+([§13.12.3](https://doc.lustre.org/lustre_manual.xhtml)). The
+`osc.*.import` dump in the
+[Lustre administration slides](https://wiki.lustre.org/images/e/e4/LUG-2010-tricksRev.pdf)
+shows `state: FULL` as the connected import state.
 
 | Metric | Labels | Meaning |
 |---|---|---|
@@ -415,6 +463,9 @@ userspace daemon and not a lock-namespace inventory. The only label is
 `operation`. The file is a PTLRPC service stat: names include
 `req_waittime`, `req_qdepth`, `req_active`, `reqbuf_avail`,
 `ldlm_bl_callback`, `ldlm_cp_callback`, and `ldlm_gl_callback`.
+The [Lustre internals architecture notes](https://wiki.lustre.org/images/e/e5/LustreInternals_Architecture.pdf)
+describe those callbacks as completion, blocking, and glimpse ASTs
+handled by the client lock-callback thread (`ldlm_cbd`).
 
 ```promql
 sum by (operation) (
@@ -432,7 +483,11 @@ grant or cancel rates.
 
 LNet message counters come from debugfs or `/proc/sys/lnet/stats`, or
 from `lnetctl stats show` when that path is selected or used as a
-fallback. Parameter files are read only after that primary stats source
+fallback. [Lustre Health Checks](https://wiki.lustre.org/Lustre_Health_Checks)
+uses `lnetctl net show` for local networks;
+the [LNet Router Config Guide](https://wiki.lustre.org/LNet_Router_Config_Guide)
+shows the same command with per-NID `status` and send/recv/drop
+counters. Parameter files are read only after that primary stats source
 succeeds. If both debugfs/proc stats and `lnetctl stats show` fail, the
 LNet collector returns an error and no LNet parameter series are
 emitted.
@@ -500,18 +555,22 @@ before calling the result imbalance.
 includes a `status` field. `up` / `UP` become `1`; any other non-empty
 status becomes `0`. Health counters and `lustre_lnet_ni_health` are
 emitted only when a `health stats` block is present. That block is why
-the exporter prefers `lnetctl net show -v 3`. If `-v 3` fails, both the
-`lnetctl` path and the `auto` supplemental path run plain
-`lnetctl net show`, which can still produce `lustre_lnet_ni_up`.
+the exporter prefers `lnetctl net show -v 3`, the command Operations
+Manual [§16.5.4.2](https://doc.lustre.org/lustre_manual.xhtml) uses for
+local NI health statistics. The same section uses
+`lnetctl peer show -v 3` for remote interfaces; this exporter does not
+call `peer show`. If `-v 3` fails, both the `lnetctl` path and the
+`auto` supplemental path run plain `lnetctl net show`, which can still
+produce `lustre_lnet_ni_up`.
 `-collector.lnet.source=debugfs` never runs `lnetctl`, so none of these
-series appear. The exporter does not call `lnetctl peer show`.
+series appear.
 
 All of the following carry `component`, `target`, and `nid`:
 
 | Metric | Type | Meaning |
 |---|---|---|
 | `lustre_lnet_ni_up` | Gauge | Local NI `status` is up (`1`) or not (`0`). |
-| `lustre_lnet_ni_health` | Gauge | Raw `health value`. The exporter does not clamp it. Lustre's usual maximum is 1000. |
+| `lustre_lnet_ni_health` | Gauge | Raw `health value`. The exporter does not clamp it. Operations Manual [§16.5.1](https://doc.lustre.org/lustre_manual.xhtml) sets the initial value to `LNET_MAX_HEALTH_VALUE` (1000). |
 | `lustre_lnet_ni_health_interrupts_total` | Counter | Health interrupts. |
 | `lustre_lnet_ni_health_dropped_total` | Counter | Health-stat drops. |
 | `lustre_lnet_ni_health_aborted_total` | Counter | Aborted operations. |
@@ -613,7 +672,11 @@ success.
 ## LPCC
 
 Persistent Client Cache metrics are collected only when `-collector.lpcc`
-is set. The collector runs `lpcc status` and parses its JSON.
+is set. The collector runs `lpcc status` and parses its JSON. That
+command is not the Operations Manual `lfs pcc_*` interface
+([chapter 27](https://doc.lustre.org/lustre_manual.xhtml)), which
+attaches, detaches, and shows per-file PCC state. The series below
+describe whatever `lpcc status` returns.
 
 If that command fails, `Collect` logs a warning and returns `nil, nil`.
 `lustre_scrape_collector_success{collector="lpcc"}` stays `1` and every
@@ -678,7 +741,10 @@ bytes. They do not, by themselves, prove that remote Lustre I/O fell.
 ## Exporter scrape quality
 
 Three families describe the collector function, not completeness of
-every target.
+every target. [Writing exporters](https://prometheus.io/docs/instrumenting/writing_exporters/)
+reserves the `process_` and `scrape_` prefixes and recommends an
+exporter-specific scrape-duration metric; these families are that
+surface.
 
 | Metric | Type | Meaning |
 |---|---|---|
@@ -756,7 +822,43 @@ training step is slower than the rest. Align these series for that
 That sequence stays on the client. It can tell you whether the node has
 an inactive import, a full writeback cache, an RPC ceiling, or a down
 local NI. It cannot tell you server queue depth, quota exhaustion, or
-MDS recovery. If application throughput is down and client wait, RPC
-pressure, LNet NI status, and import state are all normal, the stall is
-probably above Lustre: the application, local CPU, or I/O that never
-left the node.
+MDS recovery. Those answers need a server exporter or the server files
+listed in the
+[Lustre Monitoring and Statistics Guide](https://wiki.lustre.org/Lustre_Monitoring_and_Statistics_Guide).
+If application throughput is down and client wait, RPC pressure, LNet
+NI status, and import state are all normal, the stall is probably above
+Lustre: the application, local CPU, or I/O that never left the node.
+
+## References
+
+- [Lustre Operations Manual (HTML)](https://doc.lustre.org/lustre_manual.xhtml)
+  and [PDF](https://doc.lustre.org/lustre_manual.pdf): `lctl` parameters
+  (§13.12.3), reserved disk space (§13.15), LNet Health (§16.5),
+  checksums (§23.5.1), quotas (§25), Persistent Client Cache
+  (chapter 27).
+- [Lustre Health Checks](https://wiki.lustre.org/Lustre_Health_Checks):
+  `health_check`, `lfs df`, `lnetctl net show`.
+- [Lustre I/O Monitoring](https://wiki.lustre.org/Lustre_IO_Monitoring):
+  `llite.*.stats`, `osc.*.rpc_stats`, `max_rpcs_in_flight`.
+- [Lustre Monitoring and Statistics Guide](https://wiki.lustre.org/Lustre_Monitoring_and_Statistics_Guide):
+  server-side stats this exporter does not collect.
+- [LNet Router Config Guide](https://wiki.lustre.org/LNet_Router_Config_Guide):
+  `lnetctl net show` local NI status and counters.
+- [Lustre internals: architecture](https://wiki.lustre.org/images/e/e5/LustreInternals_Architecture.pdf):
+  LDLM completion, blocking, and glimpse callbacks (`ldlm_cbd`).
+- [GSI-HPC/lustre_exporter](https://github.com/GSI-HPC/lustre_exporter):
+  public metric names and labels this project stays compatible with.
+- [Prometheus querying operators](https://prometheus.io/docs/prometheus/latest/querying/operators/):
+  `ignoring` / `on` vector matching.
+- [Prometheus querying functions](https://prometheus.io/docs/prometheus/latest/querying/functions/):
+  `rate()`, `max_over_time()`.
+- [Prometheus histograms](https://prometheus.io/docs/practices/histograms/):
+  `le` buckets and `histogram_quantile`.
+- [Writing exporters](https://prometheus.io/docs/instrumenting/writing_exporters/):
+  custom collectors and scrape self-metrics.
+- [client_golang Registry](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus):
+  why a dedicated registry omits `go_*` and `process_*`.
+- [statfs(2)](https://man7.org/linux/man-pages/man2/statfs.2.html):
+  `f_bavail` versus `f_bfree`.
+- [node_exporter](https://github.com/prometheus/node_exporter):
+  block-layer disk I/O, not Lustre client operations.
