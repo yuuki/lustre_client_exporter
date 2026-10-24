@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/yuuki/lustre_client_exporter/internal/reader"
@@ -57,6 +58,16 @@ func TestDiscoverClientsPrefersProcThenSysThenDebug(t *testing.T) {
 	}
 	r.Globs["/sys/kernel/debug/lustre/mdc/*/stats"] = []string{
 		"/sys/kernel/debug/lustre/mdc/fs-MDT0000-mdc-cccc/stats",
+	}
+	r.Globs["/proc/fs/lustre/osc/*/rpc_stats"] = []string{
+		"/proc/fs/lustre/osc/fs-OST0000-osc-aaaa/rpc_stats",
+	}
+	r.Globs["/sys/fs/lustre/osc/*/rpc_stats"] = []string{
+		"/sys/fs/lustre/osc/fs-OST0000-osc-aaaa/rpc_stats",
+		"/sys/fs/lustre/osc/fs-OST0001-osc-bbbb/rpc_stats",
+	}
+	r.Globs["/sys/kernel/debug/lustre/mdc/*/rpc_stats"] = []string{
+		"/sys/kernel/debug/lustre/mdc/fs-MDT0000-mdc-cccc/rpc_stats",
 	}
 
 	targets, err := DiscoverClients(context.Background(), r, DefaultPathConfig())
@@ -120,27 +131,73 @@ func TestDiscoverClientsStatsInDebugFSParamsInSysFS(t *testing.T) {
 	}
 }
 
-func TestDiscoverClientsKeepsStatsSiblingRPCStatsPath(t *testing.T) {
-	r := reader.NewFakeReader()
-	r.Globs["/proc/fs/lustre/osc/*/stats"] = []string{
-		"/proc/fs/lustre/osc/fs-OST0000-osc-aaaa/stats",
+func TestDiscoverClientsDiscoversStatsAndRPCStatsIndependently(t *testing.T) {
+	const (
+		procRoot  = "/proc/fs/lustre"
+		sysRoot   = "/sys/fs/lustre"
+		debugRoot = "/sys/kernel/debug/lustre"
+	)
+	tests := []struct {
+		name      string
+		statsRoot string
+		rpcRoots  []string
+	}{
+		{"debug_stats_proc_rpc", debugRoot, []string{procRoot}},
+		{"proc_stats_sys_rpc", procRoot, []string{sysRoot, debugRoot}},
+		{"sys_stats_debug_rpc", sysRoot, []string{debugRoot}},
+		{"proc_siblings", procRoot, []string{procRoot}},
+		{"sys_siblings", sysRoot, []string{sysRoot}},
+		{"debug_siblings", debugRoot, []string{debugRoot}},
+		{"proc_rpc_only", "", []string{procRoot}},
+		{"sys_rpc_only", "", []string{sysRoot}},
+		{"debug_rpc_only", "", []string{debugRoot}},
+		{"missing_rpc", debugRoot, nil},
+		{"proc_rpc_preferred_over_sibling", debugRoot, []string{procRoot, sysRoot, debugRoot}},
+		{"sys_rpc_preferred_over_sibling", debugRoot, []string{sysRoot, debugRoot}},
 	}
-	r.Globs["/sys/fs/lustre/osc/*/rpc_stats"] = []string{
-		"/sys/fs/lustre/osc/fs-OST0000-osc-aaaa/rpc_stats",
-	}
-	r.Globs["/sys/kernel/debug/lustre/osc/*/rpc_stats"] = []string{
-		"/sys/kernel/debug/lustre/osc/fs-OST0000-osc-aaaa/rpc_stats",
-	}
+	for _, component := range []string{"mdc", "osc"} {
+		for _, tt := range tests {
+			t.Run(component+"/"+tt.name, func(t *testing.T) {
+				r := reader.NewFakeReader()
+				const name = "scratch-target-ffff0001"
+				var wantStats, wantRPC string
+				if tt.statsRoot != "" {
+					wantStats = filepath.Join(tt.statsRoot, component, name, "stats")
+					r.Globs[filepath.Join(tt.statsRoot, component, "*", "stats")] = []string{wantStats}
+				}
+				for _, root := range tt.rpcRoots {
+					path := filepath.Join(root, component, name, "rpc_stats")
+					r.Globs[filepath.Join(root, component, "*", "rpc_stats")] = []string{path}
+					if wantRPC == "" {
+						wantRPC = path
+					}
+				}
 
-	targets, err := DiscoverClients(context.Background(), r, DefaultPathConfig())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(targets) != 1 {
-		t.Fatalf("got %d targets", len(targets))
-	}
-	want := "/proc/fs/lustre/osc/fs-OST0000-osc-aaaa/rpc_stats"
-	if targets[0].RpcStatsPath != want {
-		t.Fatalf("rpc = %q, want sibling %q", targets[0].RpcStatsPath, want)
+				targets, err := DiscoverClients(context.Background(), r, DefaultPathConfig())
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(targets) != 1 {
+					t.Fatalf("got %d targets, want 1", len(targets))
+				}
+				target := targets[0]
+				if target.Component != component || target.Name != name {
+					t.Fatalf("unexpected target: %+v", target)
+				}
+				if target.StatsPath != wantStats {
+					t.Errorf("stats = %q, want %q", target.StatsPath, wantStats)
+				}
+				if target.RpcStatsPath != wantRPC {
+					t.Errorf("rpc = %q, want %q", target.RpcStatsPath, wantRPC)
+				}
+				if target.BasePath != filepath.Join(procRoot, component, name) {
+					t.Errorf("BasePath = %q", target.BasePath)
+				}
+				if len(target.ParamRoots) != 2 || target.ParamRoots[0] != target.BasePath ||
+					target.ParamRoots[1] != filepath.Join(sysRoot, component, name) {
+					t.Errorf("ParamRoots = %v", target.ParamRoots)
+				}
+			})
+		}
 	}
 }

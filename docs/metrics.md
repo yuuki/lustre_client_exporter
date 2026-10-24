@@ -296,11 +296,14 @@ changed with `lctl set_param` as in
 
 ## MDC and OSC RPC
 
-The source is `mdc/*/rpc_stats` and `osc/*/rpc_stats`. If an import is
-found via `stats`, `rpc_stats` is the sibling of that `stats` file and
-is not replaced by a later glob in another tree. The standalone
-`rpc_stats` glob only adds imports that had no `stats` hit, or fills an
-empty path. A missing `rpc_stats` is skipped even in strict mode.
+The source is `mdc/*/rpc_stats` and `osc/*/rpc_stats`. Each import's
+`stats` and `rpc_stats` files are discovered independently, preferring
+procfs, then sysfs, then debugfs for each file. Only paths found by
+the corresponding glob are selected; for example, `stats` in debugfs
+can be paired with `rpc_stats` in procfs for the same import.
+Imports with only `rpc_stats` are also collected. A missing
+`rpc_stats` is skipped even in strict mode; missing scalar values
+are not synthesized as zeros.
 [Lustre I/O Monitoring](https://wiki.lustre.org/Lustre_IO_Monitoring)
 describes the `pages per rpc` and `rpcs in flight` histograms from
 `lctl get_param osc.*.rpc_stats`.

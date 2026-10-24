@@ -178,9 +178,6 @@ func DiscoverClients(ctx context.Context, r reader.Reader, cfg PathConfig) ([]Cl
 				}
 				ct := newClientTarget(cfg, component, name)
 				ct.StatsPath = statsPath
-				if component == "mdc" || component == "osc" {
-					ct.RpcStatsPath = filepath.Join(dir, "rpc_stats")
-				}
 				seen[key] = len(targets)
 				targets = append(targets, ct)
 			}
