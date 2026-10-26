@@ -71,6 +71,8 @@ Reads client filesystem stats, capacity, tunables, RPC statistics, and LDLM call
 
 For mdc and osc targets, the collector also reads `stats` (operation counts and latency sums) and `rpc_stats` (current in-flight RPCs and pending pages). OSC writeback uses `cur_dirty_bytes` and `max_dirty_mb`. Both imports expose RPC stream limits (`max_rpcs_in_flight`, and `max_mod_rpcs_in_flight` on MDC), `max_pages_per_rpc` when present, plus `active` and `state` (`current_state` only). All of these metrics use `component="client"`; latency sums, instantaneous RPC values, RPC limits, and import state also carry `type="mdc"` or `type="osc"`.
 
+`stats` and `rpc_stats` are discovered independently in procfs, sysfs, then debugfs order. They need not be siblings: for example, an import can have `stats` in debugfs and `rpc_stats` in procfs. Imports with only `rpc_stats` are also collected.
+
 Average client-observed RPC wait time for an operation such as `req_waittime`:
 
 ```promql

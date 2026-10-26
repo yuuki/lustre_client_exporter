@@ -29,6 +29,12 @@ func newTestClientFakeReader(t *testing.T) *reader.FakeReader {
 	r.Globs["/proc/fs/lustre/osc/*/stats"] = []string{
 		"/proc/fs/lustre/osc/scratch-OST0000-osc-ffff0001/stats",
 	}
+	r.Globs["/proc/fs/lustre/mdc/*/rpc_stats"] = []string{
+		"/proc/fs/lustre/mdc/scratch-MDT0000-mdc-ffff0001/rpc_stats",
+	}
+	r.Globs["/proc/fs/lustre/osc/*/rpc_stats"] = []string{
+		"/proc/fs/lustre/osc/scratch-OST0000-osc-ffff0001/rpc_stats",
+	}
 
 	// llite stats
 	loadFixture(t, r, "/proc/fs/lustre/llite/scratch-ffff0001/stats", "../testdata/llite/stats.txt")
@@ -253,6 +259,104 @@ func TestClientCollector_RPCCurrentScalars(t *testing.T) {
 		"type":      "osc",
 		"operation": "write",
 	}, 120)
+}
+
+func TestClientCollector_DebugFSStatsWithProcFSRPCStats(t *testing.T) {
+	for _, component := range []string{"mdc", "osc"} {
+		for _, mode := range []struct {
+			name   string
+			strict bool
+		}{
+			{"non_strict", false},
+			{"strict", true},
+		} {
+			t.Run(component+"/"+mode.name, func(t *testing.T) {
+				const target = "scratch-target-ffff0001"
+				r := reader.NewFakeReader()
+				statsPath := "/sys/kernel/debug/lustre/" + component + "/" + target + "/stats"
+				rpcPath := "/proc/fs/lustre/" + component + "/" + target + "/rpc_stats"
+				r.Globs["/sys/kernel/debug/lustre/"+component+"/*/stats"] = []string{statsPath}
+				r.Globs["/proc/fs/lustre/"+component+"/*/rpc_stats"] = []string{rpcPath}
+				loadFixture(t, r, statsPath, "../testdata/"+component+"/stats.txt")
+				r.Files[rpcPath] = []byte(`
+snapshot_time:         1681000000.123456789 (secs.nsecs)
+read RPCs in flight:  0
+write RPCs in flight: 0
+pending read pages:   0
+pending write pages:  0
+
+                        read            write
+pages per rpc         rpcs   % cum %   rpcs   % cum %
+1:                       10 100 100   |     20 100 100
+
+                        read            write
+rpcs in flight        rpcs   % cum %   rpcs   % cum %
+1:                        8 100 100   |     12 100 100
+
+                        read            write
+offset                pages  % cum %  pages  % cum %
+0:                        5 100 100   |     15 100 100
+`)
+
+				logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+				c := NewClientCollectorWithStrict(r, discovery.DefaultPathConfig(), logger, mode.strict)
+				metrics, err := c.Collect(context.Background())
+				if err != nil {
+					t.Fatal(err)
+				}
+				waitSeconds := 0.25
+				if component == "osc" {
+					waitSeconds = 0.5
+				}
+				assertMetric(t, metrics, "lustre_stats_seconds_sum", map[string]string{
+					"component": "client", "target": target, "type": component, "operation": "req_waittime",
+				}, waitSeconds)
+				for _, operation := range []string{"read", "write"} {
+					labels := map[string]string{
+						"component": "client", "target": target, "type": component, "operation": operation,
+					}
+					assertMetric(t, metrics, "lustre_rpcs_current", labels, 0)
+					assertMetric(t, metrics, "lustre_pending_pages", labels, 0)
+				}
+				for _, histogram := range []struct {
+					name       string
+					size       string
+					readValue  float64
+					writeValue float64
+				}{
+					{"lustre_pages_per_rpc_total", "1", 10, 20},
+					{"lustre_rpcs_in_flight", "1", 8, 12},
+					{"lustre_rpcs_offset", "0", 5, 15},
+				} {
+					labels := map[string]string{
+						"component": "client", "target": target, "size": histogram.size, "operation": "read",
+					}
+					if histogram.name == "lustre_rpcs_in_flight" {
+						labels["type"] = component
+					}
+					assertMetric(t, metrics, histogram.name, labels, histogram.readValue)
+					labels["operation"] = "write"
+					assertMetric(t, metrics, histogram.name, labels, histogram.writeValue)
+				}
+
+				registry := prometheus.NewRegistry()
+				registry.MustRegister(NewRegistryWithStrict(logger, 0, 0, mode.strict, c))
+				families, err := registry.Gather()
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, family := range families {
+					if family.GetName() == "lustre_scrape_collector_success" {
+						if len(family.Metric) != 1 || family.Metric[0].GetGauge().GetValue() != 1 {
+							t.Fatalf("unexpected collector success: %v", family)
+						}
+						return
+					}
+				}
+				t.Fatal("collector success metric not found")
+			})
+		}
+	}
 }
 
 func TestClientCollector_RPCStatsGSICompatibleLabels(t *testing.T) {
