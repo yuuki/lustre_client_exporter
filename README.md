@@ -16,7 +16,7 @@ This exporter emits metric names and labels compatible with [GSI-HPC/lustre_expo
 Download the latest release from [GitHub Releases](https://github.com/yuuki/lustre_client_exporter/releases):
 
 ```sh
-VERSION=0.1.0
+VERSION=0.2.1
 ARCH=amd64  # or arm64
 curl -fsSL "https://github.com/yuuki/lustre_client_exporter/releases/download/v${VERSION}/lustre_client_exporter_${VERSION}_linux_${ARCH}.tar.gz" \
   | tar xz lustre_client_exporter
