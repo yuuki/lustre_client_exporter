@@ -17,7 +17,7 @@ go test ./internal/parser/...   # run tests for a single package
 go test -run TestParseLLiteStats ./internal/parser/  # run a single test
 ```
 
-Go version is managed via `mise.toml` (currently 1.27.1).
+Go version is managed via `mise.toml` (currently 1.27.3).
 
 ## Architecture
 
