@@ -6,12 +6,14 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/yuuki/lustre_client_exporter/internal/discovery"
+	"github.com/yuuki/lustre_client_exporter/internal/parser"
 	"github.com/yuuki/lustre_client_exporter/internal/reader"
 )
 
@@ -568,4 +570,305 @@ func labelsMatch(got []*dto.LabelPair, want map[string]string) bool {
 		}
 	}
 	return true
+}
+
+// hasMetric reports whether metrics contains a series with exactly these labels.
+func hasMetric(t *testing.T, metrics []prometheus.Metric, name string, labels map[string]string) bool {
+	t.Helper()
+	for _, metric := range metrics {
+		if extractMetricName(metric.Desc().String()) != name {
+			continue
+		}
+		var dm dto.Metric
+		if err := metric.Write(&dm); err != nil {
+			t.Fatal(err)
+		}
+		if labelsMatch(dm.GetLabel(), labels) {
+			return true
+		}
+	}
+	return false
+}
+
+func newDebugLogger(buf *bytes.Buffer) *slog.Logger {
+	return slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+}
+
+func TestClientCollector_RPCTargetSourceFailures(t *testing.T) {
+	const osc = "scratch-OST0000-osc-ffff0001"
+	const oscDir = "/proc/fs/lustre/osc/" + osc + "/"
+	type series struct {
+		name   string
+		labels map[string]string
+		value  float64
+	}
+	// One series per source of the osc target: stats, rpc_stats, a tunable and
+	// the import state (read after the tunable).
+	statsSum := series{"lustre_stats_seconds_sum", map[string]string{
+		"component": "client", "target": osc, "type": "osc", "operation": "req_waittime"}, 0.5}
+	rpcCurrent := series{"lustre_rpcs_current", map[string]string{
+		"component": "client", "target": osc, "type": "osc", "operation": "write"}, 5}
+	maxDirty := series{"lustre_osc_max_dirty_bytes", map[string]string{
+		"component": "client", "target": osc}, 33554432}
+	state := series{"lustre_target_state", map[string]string{
+		"component": "client", "target": osc, "type": "osc", "state": "FULL"}, 1}
+	errDenied := errors.New("permission denied")
+
+	tests := []struct {
+		name      string
+		inject    func(r *reader.FakeReader)
+		wantLog   string
+		strictErr bool // whether strict mode fails the whole collection
+		kept      []series
+		dropped   series
+	}{
+		{
+			name:      "stats read error",
+			inject:    func(r *reader.FakeReader) { r.Errors[oscDir+"stats"] = errDenied },
+			wantLog:   `level=WARN msg="obd stats read failed" component=osc target=` + osc + ` error="permission denied"`,
+			strictErr: true,
+			kept:      []series{rpcCurrent, maxDirty, state},
+			dropped:   statsSum,
+		},
+		{
+			name: "stats parse error",
+			inject: func(r *reader.FakeReader) {
+				r.Files[oscDir+"stats"] = []byte("req_waittime notanumber samples [usec] 1 2 3\n")
+			},
+			wantLog:   `level=WARN msg="failed to parse obd stats" component=osc target=` + osc,
+			strictErr: true,
+			kept:      []series{rpcCurrent, maxDirty, state},
+			dropped:   statsSum,
+		},
+		{
+			name:      "rpc_stats missing",
+			inject:    func(r *reader.FakeReader) { delete(r.Files, oscDir+"rpc_stats") },
+			wantLog:   `level=DEBUG msg="rpc_stats not found" component=osc target=` + osc + ` path=` + oscDir + `rpc_stats`,
+			strictErr: false,
+			kept:      []series{statsSum, maxDirty, state},
+			dropped:   rpcCurrent,
+		},
+		{
+			name:      "rpc_stats read error",
+			inject:    func(r *reader.FakeReader) { r.Errors[oscDir+"rpc_stats"] = errDenied },
+			wantLog:   `level=WARN msg="rpc_stats read failed" component=osc target=` + osc + ` error="permission denied"`,
+			strictErr: true,
+			kept:      []series{statsSum, maxDirty, state},
+			dropped:   rpcCurrent,
+		},
+		{
+			name: "rpc_stats parse error",
+			inject: func(r *reader.FakeReader) {
+				r.Files[oscDir+"rpc_stats"] = []byte("write RPCs in flight: 5\n\n" +
+					"                        read            write\n" +
+					"pages per rpc         rpcs   % cum %   rpcs   % cum %\n" +
+					"1:                     abc  93  93   |  148562  92  92\n")
+			},
+			wantLog:   `level=WARN msg="failed to parse rpc stats" component=osc target=` + osc,
+			strictErr: true,
+			kept:      []series{statsSum, maxDirty, state},
+			dropped:   rpcCurrent,
+		},
+		{
+			name:      "param file parse error",
+			inject:    func(r *reader.FakeReader) { r.Files[oscDir+"max_dirty_mb"] = []byte("garbage\n") },
+			wantLog:   `level=WARN msg="failed to parse client param file" file=max_dirty_mb component=osc target=` + osc,
+			strictErr: true,
+			kept:      []series{statsSum, rpcCurrent, state},
+			dropped:   maxDirty,
+		},
+		{
+			name: "param file missing",
+			inject: func(r *reader.FakeReader) {
+				delete(r.Files, oscDir+"max_dirty_mb")
+			},
+			wantLog:   `level=DEBUG msg="client param file not found" file=max_dirty_mb component=osc target=` + osc,
+			strictErr: false,
+			kept:      []series{statsSum, rpcCurrent, state},
+			dropped:   maxDirty,
+		},
+	}
+	// assertSkipped checks that only the failed source is missing: the log
+	// names it, its series is absent and the target's other sources are kept.
+	assertSkipped := func(t *testing.T, metrics []prometheus.Metric, logs string, wantLog string, kept []series, dropped series) {
+		t.Helper()
+		if !strings.Contains(logs, wantLog) {
+			t.Fatalf("log %q not found in:\n%s", wantLog, logs)
+		}
+		for _, s := range kept {
+			assertMetric(t, metrics, s.name, s.labels, s.value)
+		}
+		if hasMetric(t, metrics, dropped.name, dropped.labels) {
+			t.Fatalf("metric %s %v from the failed source is present", dropped.name, dropped.labels)
+		}
+	}
+	for _, tt := range tests {
+		t.Run(tt.name+"/non_strict", func(t *testing.T) {
+			r := newTestClientFakeReader(t)
+			tt.inject(r)
+			var logs bytes.Buffer
+			c := NewClientCollectorWithStrict(r, discovery.DefaultPathConfig(), newDebugLogger(&logs), false)
+			metrics, err := c.Collect(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertSkipped(t, metrics, logs.String(), tt.wantLog, tt.kept, tt.dropped)
+		})
+		t.Run(tt.name+"/strict", func(t *testing.T) {
+			r := newTestClientFakeReader(t)
+			tt.inject(r)
+			var logs bytes.Buffer
+			c := NewClientCollectorWithStrict(r, discovery.DefaultPathConfig(), newDebugLogger(&logs), true)
+			metrics, err := c.Collect(context.Background())
+			if tt.strictErr {
+				if err == nil {
+					t.Fatal("expected strict collection to fail")
+				}
+				if metrics != nil {
+					t.Fatalf("got %d metrics with error", len(metrics))
+				}
+				if strings.Contains(logs.String(), "level=WARN") {
+					t.Fatalf("strict mode logged a warning:\n%s", logs.String())
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertSkipped(t, metrics, logs.String(), tt.wantLog, tt.kept, tt.dropped)
+		})
+	}
+}
+
+func TestClientCollector_StrictReturnsUnwrappedReadError(t *testing.T) {
+	errDenied := errors.New("permission denied")
+	for _, file := range []string{"stats", "rpc_stats", "max_dirty_mb"} {
+		t.Run(file, func(t *testing.T) {
+			r := newTestClientFakeReader(t)
+			path := "/proc/fs/lustre/osc/scratch-OST0000-osc-ffff0001/" + file
+			r.Errors[path] = errDenied
+			c := NewClientCollectorWithStrict(r, discovery.DefaultPathConfig(), slog.New(slog.NewTextHandler(os.Stderr, nil)), true)
+			_, err := c.Collect(context.Background())
+			if file == "max_dirty_mb" {
+				// An unreadable optional tunable is skipped even in strict mode.
+				if err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
+			if err != errDenied {
+				t.Fatalf("err = %v, want the read error itself", err)
+			}
+		})
+	}
+}
+
+func TestClientCollector_LDLMCBDParseFailure(t *testing.T) {
+	newReader := func(t *testing.T) *reader.FakeReader {
+		r := newTestClientFakeReader(t)
+		r.Files["/proc/fs/lustre/ldlm/services/ldlm_cbd/stats"] = []byte("ldlm_bl_callback xx samples [reqs]\n")
+		return r
+	}
+
+	var logs bytes.Buffer
+	c := NewClientCollectorWithStrict(newReader(t), discovery.DefaultPathConfig(), newDebugLogger(&logs), false)
+	metrics, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(logs.String(), `level=WARN msg="ldlm_cbd stats collection failed" error=`) {
+		t.Fatalf("missing ldlm_cbd warning in:\n%s", logs.String())
+	}
+	assertMetric(t, metrics, "lustre_blocksize_bytes", map[string]string{
+		"component": "client", "target": "scratch-ffff0001",
+	}, 4194304)
+
+	c = NewClientCollectorWithStrict(newReader(t), discovery.DefaultPathConfig(), newDebugLogger(&logs), true)
+	if _, err := c.Collect(context.Background()); err == nil {
+		t.Fatal("expected strict collection to fail on malformed ldlm_cbd stats")
+	}
+}
+
+func TestClientCollector_LLiteFailureSkipsOnlyThatTarget(t *testing.T) {
+	r := newTestClientFakeReader(t)
+	r.Errors["/proc/fs/lustre/llite/scratch-ffff0001/stats"] = errors.New("permission denied")
+
+	var logs bytes.Buffer
+	c := NewClientCollectorWithStrict(r, discovery.DefaultPathConfig(), newDebugLogger(&logs), false)
+	metrics, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `level=WARN msg="llite collection failed" target=scratch-ffff0001 error="permission denied"`
+	if !strings.Contains(logs.String(), want) {
+		t.Fatalf("log %q not found in:\n%s", want, logs.String())
+	}
+	if hasMetric(t, metrics, "lustre_blocksize_bytes", map[string]string{"component": "client", "target": "scratch-ffff0001"}) {
+		t.Fatal("llite metrics present although its stats read failed")
+	}
+	assertMetric(t, metrics, "lustre_stats_seconds_sum", map[string]string{
+		"component": "client", "target": "scratch-OST0000-osc-ffff0001", "type": "osc", "operation": "req_waittime",
+	}, 0.5)
+}
+
+func TestClientCollector_StrictReturnsFirstErrorInCollectionOrder(t *testing.T) {
+	const (
+		mdcDir = "/proc/fs/lustre/mdc/scratch-MDT0000-mdc-ffff0001/"
+		oscDir = "/proc/fs/lustre/osc/scratch-OST0000-osc-ffff0001/"
+	)
+	badStats := []byte("req_waittime notanumber samples [usec] 1 2 3\n")
+	_, parseErr := parser.ParseOBDStats(badStats, oscDir+"stats", "client", "scratch-OST0000-osc-ffff0001", "osc")
+	if parseErr == nil {
+		t.Fatal("malformed stats fixture parsed without error")
+	}
+	errFirst := errors.New("first failure")
+	errSecond := errors.New("second failure")
+
+	tests := []struct {
+		name   string
+		inject func(r *reader.FakeReader)
+		want   error
+	}{
+		{
+			// Within a target, stats are collected before rpc_stats.
+			name: "stats read error before rpc_stats read error",
+			inject: func(r *reader.FakeReader) {
+				r.Errors[oscDir+"stats"] = errFirst
+				r.Errors[oscDir+"rpc_stats"] = errSecond
+			},
+			want: errFirst,
+		},
+		{
+			name: "stats parse error before rpc_stats read error",
+			inject: func(r *reader.FakeReader) {
+				r.Files[oscDir+"stats"] = badStats
+				r.Errors[oscDir+"rpc_stats"] = errSecond
+			},
+			want: parseErr,
+		},
+		{
+			// Targets are collected in discovery order (mdc before osc) and
+			// the first failure ends the scrape.
+			name: "earlier target fails first",
+			inject: func(r *reader.FakeReader) {
+				r.Errors[mdcDir+"rpc_stats"] = errFirst
+				r.Errors[oscDir+"stats"] = errSecond
+			},
+			want: errFirst,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newTestClientFakeReader(t)
+			tt.inject(r)
+			c := NewClientCollectorWithStrict(r, discovery.DefaultPathConfig(), slog.New(slog.NewTextHandler(os.Stderr, nil)), true)
+			_, err := c.Collect(context.Background())
+			// Injected read errors must come back as the same value. The parse
+			// error is built by the parser, so it is compared by value: equal
+			// only if it was returned unwrapped.
+			if err != tt.want && !reflect.DeepEqual(err, tt.want) {
+				t.Fatalf("err = %v (%T), want %v (%T)", err, err, tt.want, tt.want)
+			}
+		})
+	}
 }

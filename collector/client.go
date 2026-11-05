@@ -66,38 +66,21 @@ func (c *ClientCollector) Collect(ctx context.Context) ([]prometheus.Metric, err
 	var allObs []parser.Observation
 
 	ldlmObs, err := c.collectLDLMCBD(ctx)
-	if err != nil {
-		if c.strict {
-			return nil, err
-		}
-		c.logger.Warn("ldlm_cbd stats collection failed", "error", err)
-	} else {
+	switch {
+	case err == nil:
 		allObs = append(allObs, ldlmObs...)
+	case c.strict:
+		return nil, err
+	default:
+		c.logger.Warn("ldlm_cbd stats collection failed", "error", err)
 	}
 
 	for _, t := range targets {
-		switch t.Component {
-		case "llite":
-			obs, err := c.collectLLite(ctx, t)
-			if err != nil {
-				if c.strict {
-					return nil, err
-				}
-				c.logger.Warn("llite collection failed", "target", t.Name, "error", err)
-				continue
-			}
-			allObs = append(allObs, obs...)
-		case "mdc", "osc":
-			obs, err := c.collectRPC(ctx, t)
-			if err != nil {
-				if c.strict {
-					return nil, err
-				}
-				c.logger.Warn("rpc collection failed", "component", t.Component, "target", t.Name, "error", err)
-				continue
-			}
-			allObs = append(allObs, obs...)
+		obs, err := c.collectTarget(ctx, t)
+		if err != nil {
+			return nil, err
 		}
+		allObs = append(allObs, obs...)
 	}
 
 	mapped, err := mapper.Map(allObs)
@@ -105,6 +88,37 @@ func (c *ClientCollector) Collect(ctx context.Context) ([]prometheus.Metric, err
 		return nil, err
 	}
 	return emitter.Emit(mapped), nil
+}
+
+// collectTarget collects one discovered target according to its component.
+// A failed target fails the scrape in strict mode and is skipped otherwise.
+func (c *ClientCollector) collectTarget(ctx context.Context, t discovery.ClientTarget) ([]parser.Observation, error) {
+	switch t.Component {
+	case "llite":
+		obs, err := c.collectLLite(ctx, t)
+		if err != nil {
+			return nil, c.strictError(err, "llite collection failed", "target", t.Name)
+		}
+		return obs, nil
+	case "mdc", "osc":
+		obs, err := c.collectRPC(ctx, t)
+		if err != nil {
+			return nil, c.strictError(err, "rpc collection failed", "component", t.Component, "target", t.Name)
+		}
+		return obs, nil
+	}
+	return nil, nil
+}
+
+// strictError returns err in strict mode. Otherwise it logs err as a warning
+// with msg and the key-value pairs in args and returns nil, so the caller
+// skips the failed source and collection continues.
+func (c *ClientCollector) strictError(err error, msg string, args ...any) error {
+	if c.strict {
+		return err
+	}
+	c.logger.Warn(msg, append(args, "error", err)...)
+	return nil
 }
 
 func (c *ClientCollector) collectLDLMCBD(ctx context.Context) ([]parser.Observation, error) {
@@ -168,68 +182,82 @@ func (c *ClientCollector) readParamFile(ctx context.Context, t discovery.ClientT
 	return nil, "", lastErr
 }
 
+// collectRPC collects an mdc or osc target: its stats, its rpc_stats and its
+// optional param files, in that order.
 func (c *ClientCollector) collectRPC(ctx context.Context, t discovery.ClientTarget) ([]parser.Observation, error) {
 	var allObs []parser.Observation
 
-	if t.StatsPath != "" {
-		data, err := c.reader.ReadFile(ctx, t.StatsPath)
-		if err != nil {
-			if c.strict {
-				return nil, err
-			}
-			c.logger.Warn("obd stats read failed", "component", t.Component, "target", t.Name, "error", err)
-		} else {
-			obs, err := parser.ParseOBDStats(data, t.StatsPath, "client", t.Name, t.Component)
-			if err != nil {
-				if c.strict {
-					return nil, err
-				}
-				c.logger.Warn("failed to parse obd stats", "component", t.Component, "target", t.Name, "error", err)
-			} else {
-				allObs = append(allObs, obs...)
-			}
-		}
+	obs, err := c.collectOBDStats(ctx, t)
+	if err != nil {
+		return nil, err
 	}
+	allObs = append(allObs, obs...)
 
-	if t.RpcStatsPath != "" {
-		data, err := c.reader.ReadFile(ctx, t.RpcStatsPath)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) || errors.Is(err, fs.ErrNotExist) {
-				c.logger.Debug("rpc_stats not found", "component", t.Component, "target", t.Name, "path", t.RpcStatsPath, "error", err)
-			} else if c.strict {
-				return nil, err
-			} else {
-				c.logger.Warn("rpc_stats read failed", "component", t.Component, "target", t.Name, "error", err)
-			}
-		} else {
-			obs, err := parser.ParseRPCStats(data, t.RpcStatsPath, "client", t.Name, t.Component)
-			if err != nil {
-				if c.strict {
-					return nil, err
-				}
-				c.logger.Warn("failed to parse rpc stats", "component", t.Component, "target", t.Name, "error", err)
-			} else {
-				allObs = append(allObs, obs...)
-			}
-		}
+	obs, err = c.collectRPCStats(ctx, t)
+	if err != nil {
+		return nil, err
 	}
+	allObs = append(allObs, obs...)
 
-	paramFiles := oscParamFiles
-	if t.Component == "mdc" {
-		paramFiles = mdcParamFiles
+	obs, err = c.collectClientParams(ctx, t)
+	if err != nil {
+		return nil, err
 	}
-	for _, name := range paramFiles {
+	allObs = append(allObs, obs...)
+
+	return allObs, nil
+}
+
+// collectOBDStats reads and parses the target's stats file, if one was discovered.
+func (c *ClientCollector) collectOBDStats(ctx context.Context, t discovery.ClientTarget) ([]parser.Observation, error) {
+	if t.StatsPath == "" {
+		return nil, nil
+	}
+	data, err := c.reader.ReadFile(ctx, t.StatsPath)
+	if err != nil {
+		return nil, c.strictError(err, "obd stats read failed", "component", t.Component, "target", t.Name)
+	}
+	obs, err := parser.ParseOBDStats(data, t.StatsPath, "client", t.Name, t.Component)
+	if err != nil {
+		return nil, c.strictError(err, "failed to parse obd stats", "component", t.Component, "target", t.Name)
+	}
+	return obs, nil
+}
+
+// collectRPCStats reads and parses the target's rpc_stats file, if one was
+// discovered. A file that has disappeared since discovery is not an error,
+// even in strict mode.
+func (c *ClientCollector) collectRPCStats(ctx context.Context, t discovery.ClientTarget) ([]parser.Observation, error) {
+	if t.RpcStatsPath == "" {
+		return nil, nil
+	}
+	data, err := c.reader.ReadFile(ctx, t.RpcStatsPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, fs.ErrNotExist) {
+			c.logger.Debug("rpc_stats not found", "component", t.Component, "target", t.Name, "path", t.RpcStatsPath, "error", err)
+			return nil, nil
+		}
+		return nil, c.strictError(err, "rpc_stats read failed", "component", t.Component, "target", t.Name)
+	}
+	obs, err := parser.ParseRPCStats(data, t.RpcStatsPath, "client", t.Name, t.Component)
+	if err != nil {
+		return nil, c.strictError(err, "failed to parse rpc stats", "component", t.Component, "target", t.Name)
+	}
+	return obs, nil
+}
+
+// collectClientParams reads the optional mdc or osc param files of the target.
+// An absent or unreadable file is skipped, even in strict mode; a malformed one
+// fails only in strict mode.
+func (c *ClientCollector) collectClientParams(ctx context.Context, t discovery.ClientTarget) ([]parser.Observation, error) {
+	var allObs []parser.Observation
+	for _, name := range clientParamFiles(t.Component) {
 		data, path, err := c.readParamFile(ctx, t, name)
 		if err != nil {
 			c.logger.Debug("client param file not found", "file", name, "component", t.Component, "target", t.Name)
 			continue
 		}
-		var obs []parser.Observation
-		if name == "state" {
-			obs, err = parser.ParseClientState(data, path, "client", t.Name, t.Component)
-		} else {
-			obs, err = parser.ParseClientSingleFile(data, path, name, "client", t.Name, t.Component)
-		}
+		obs, err := parseClientParamFile(data, path, name, t)
 		if err != nil {
 			if c.strict {
 				return nil, err
@@ -239,6 +267,22 @@ func (c *ClientCollector) collectRPC(ctx context.Context, t discovery.ClientTarg
 		}
 		allObs = append(allObs, obs...)
 	}
-
 	return allObs, nil
+}
+
+// clientParamFiles returns the param files read for an mdc or osc target.
+func clientParamFiles(component string) []string {
+	if component == "mdc" {
+		return mdcParamFiles
+	}
+	return oscParamFiles
+}
+
+// parseClientParamFile parses one mdc or osc param file: the import state, or
+// a single-value file.
+func parseClientParamFile(data []byte, path, name string, t discovery.ClientTarget) ([]parser.Observation, error) {
+	if name == "state" {
+		return parser.ParseClientState(data, path, "client", t.Name, t.Component)
+	}
+	return parser.ParseClientSingleFile(data, path, name, "client", t.Name, t.Component)
 }

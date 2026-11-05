@@ -160,53 +160,76 @@ func newClientTarget(cfg PathConfig, component, name string) ClientTarget {
 
 // DiscoverClients enumerates all llite, mdc, and osc targets.
 func DiscoverClients(ctx context.Context, r reader.Reader, cfg PathConfig) ([]ClientTarget, error) {
-	var targets []ClientTarget
-	seen := map[string]int{}
+	idx := clientIndex{cfg: cfg, seen: map[string]int{}}
 
 	for _, component := range []string{"llite", "mdc", "osc"} {
-		for _, pattern := range clientStatsPatterns(cfg, component) {
-			matches, err := r.Glob(ctx, pattern)
-			if err != nil {
-				continue
-			}
-			for _, statsPath := range matches {
-				dir := filepath.Dir(statsPath)
-				name := filepath.Base(dir)
-				key := component + "/" + name
-				if _, ok := seen[key]; ok {
-					continue
-				}
-				ct := newClientTarget(cfg, component, name)
-				ct.StatsPath = statsPath
-				seen[key] = len(targets)
-				targets = append(targets, ct)
-			}
+		for _, statsPath := range globAll(ctx, r, clientStatsPatterns(cfg, component)) {
+			idx.addStats(component, statsPath)
 		}
 	}
 
 	for _, component := range []string{"mdc", "osc"} {
-		for _, pattern := range clientRPCStatsPatterns(cfg, component) {
-			matches, err := r.Glob(ctx, pattern)
-			if err != nil {
-				continue
-			}
-			for _, rpcStatsPath := range matches {
-				name := filepath.Base(filepath.Dir(rpcStatsPath))
-				key := component + "/" + name
-				if idx, ok := seen[key]; ok {
-					if targets[idx].RpcStatsPath == "" {
-						targets[idx].RpcStatsPath = rpcStatsPath
-					}
-					continue
-				}
-
-				ct := newClientTarget(cfg, component, name)
-				ct.RpcStatsPath = rpcStatsPath
-				seen[key] = len(targets)
-				targets = append(targets, ct)
-			}
+		for _, rpcStatsPath := range globAll(ctx, r, clientRPCStatsPatterns(cfg, component)) {
+			idx.addRPCStats(component, rpcStatsPath)
 		}
 	}
 
-	return targets, nil
+	return idx.targets, nil
+}
+
+// globAll returns the matches of every pattern, in pattern order. A pattern
+// whose glob fails contributes no matches.
+func globAll(ctx context.Context, r reader.Reader, patterns []string) []string {
+	var all []string
+	for _, pattern := range patterns {
+		matches, err := r.Glob(ctx, pattern)
+		if err != nil {
+			continue
+		}
+		all = append(all, matches...)
+	}
+	return all
+}
+
+// clientIndex accumulates discovered client targets in discovery order,
+// keeping one target per component and name.
+type clientIndex struct {
+	cfg     PathConfig
+	targets []ClientTarget
+	seen    map[string]int // "component/name" -> index into targets
+}
+
+// addStats records the stats file of a target. The first stats file found for
+// a target wins.
+func (x *clientIndex) addStats(component, statsPath string) {
+	name := filepath.Base(filepath.Dir(statsPath))
+	key := component + "/" + name
+	if _, ok := x.seen[key]; ok {
+		return
+	}
+	ct := newClientTarget(x.cfg, component, name)
+	ct.StatsPath = statsPath
+	x.add(key, ct)
+}
+
+// addRPCStats records the rpc_stats file of a target, independently of where
+// its stats file was found. A target without a stats file is still added. The
+// first rpc_stats file found for a target wins.
+func (x *clientIndex) addRPCStats(component, rpcStatsPath string) {
+	name := filepath.Base(filepath.Dir(rpcStatsPath))
+	key := component + "/" + name
+	if i, ok := x.seen[key]; ok {
+		if x.targets[i].RpcStatsPath == "" {
+			x.targets[i].RpcStatsPath = rpcStatsPath
+		}
+		return
+	}
+	ct := newClientTarget(x.cfg, component, name)
+	ct.RpcStatsPath = rpcStatsPath
+	x.add(key, ct)
+}
+
+func (x *clientIndex) add(key string, ct ClientTarget) {
+	x.seen[key] = len(x.targets)
+	x.targets = append(x.targets, ct)
 }
