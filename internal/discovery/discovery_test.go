@@ -227,28 +227,41 @@ func TestDiscoverClientsOrderDedupAndGlobFailures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	target := func(component, name, stats, rpc string) ClientTarget {
-		return ClientTarget{
-			Component:    component,
-			Name:         name,
-			StatsPath:    stats,
-			RpcStatsPath: rpc,
-			BasePath:     "/proc/fs/lustre/" + component + "/" + name,
-			ParamRoots: []string{
-				"/proc/fs/lustre/" + component + "/" + name,
-				"/sys/fs/lustre/" + component + "/" + name,
-			},
-		}
-	}
 	// Stats targets come first (llite, mdc, osc), then rpc_stats-only targets
 	// (mdc, osc), each in glob order.
 	want := []ClientTarget{
-		target("llite", "fs-ffff", "/proc/fs/lustre/llite/fs-ffff/stats", ""),
-		target("osc", "fs-OST0001-osc-bbbb", "/sys/fs/lustre/osc/fs-OST0001-osc-bbbb/stats", ""),
-		target("osc", "fs-OST0000-osc-aaaa", "/sys/fs/lustre/osc/fs-OST0000-osc-aaaa/stats",
+		wantClientTarget("llite", "fs-ffff", "/proc/fs/lustre/llite/fs-ffff/stats", ""),
+		wantClientTarget("osc", "fs-OST0001-osc-bbbb", "/sys/fs/lustre/osc/fs-OST0001-osc-bbbb/stats", ""),
+		wantClientTarget("osc", "fs-OST0000-osc-aaaa", "/sys/fs/lustre/osc/fs-OST0000-osc-aaaa/stats",
 			"/proc/fs/lustre/osc/fs-OST0000-osc-aaaa/rpc_stats"),
-		target("mdc", "fs-MDT0000-mdc-cccc", "", "/sys/fs/lustre/mdc/fs-MDT0000-mdc-cccc/rpc_stats"),
-		target("osc", "fs-OST0002-osc-dddd", "", "/sys/kernel/debug/lustre/osc/fs-OST0002-osc-dddd/rpc_stats"),
+		wantClientTarget("mdc", "fs-MDT0000-mdc-cccc", "", "/sys/fs/lustre/mdc/fs-MDT0000-mdc-cccc/rpc_stats"),
+		wantClientTarget("osc", "fs-OST0002-osc-dddd", "", "/sys/kernel/debug/lustre/osc/fs-OST0002-osc-dddd/rpc_stats"),
+	}
+	if !reflect.DeepEqual(targets, want) {
+		t.Fatalf("targets mismatch\n got: %+v\nwant: %+v", targets, want)
+	}
+}
+
+func TestDiscoverClientsKeepsMatchesBeforeAFailedGlob(t *testing.T) {
+	r := reader.NewFakeReader()
+	// For each component, a glob fails after an earlier root matched; the
+	// earlier matches and those of the later roots are all kept.
+	r.Globs["/proc/fs/lustre/osc/*/stats"] = []string{"/proc/fs/lustre/osc/fs-OST0000-osc-aaaa/stats"}
+	r.Errors["/sys/fs/lustre/osc/*/stats"] = errors.New("glob failed")
+	r.Globs["/sys/kernel/debug/lustre/osc/*/stats"] = []string{"/sys/kernel/debug/lustre/osc/fs-OST0001-osc-bbbb/stats"}
+	r.Globs["/proc/fs/lustre/mdc/*/rpc_stats"] = []string{"/proc/fs/lustre/mdc/fs-MDT0000-mdc-cccc/rpc_stats"}
+	r.Errors["/sys/fs/lustre/mdc/*/rpc_stats"] = errors.New("glob failed")
+	r.Globs["/sys/kernel/debug/lustre/mdc/*/rpc_stats"] = []string{"/sys/kernel/debug/lustre/mdc/fs-MDT0001-mdc-dddd/rpc_stats"}
+
+	targets, err := DiscoverClients(context.Background(), r, DefaultPathConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []ClientTarget{
+		wantClientTarget("osc", "fs-OST0000-osc-aaaa", "/proc/fs/lustre/osc/fs-OST0000-osc-aaaa/stats", ""),
+		wantClientTarget("osc", "fs-OST0001-osc-bbbb", "/sys/kernel/debug/lustre/osc/fs-OST0001-osc-bbbb/stats", ""),
+		wantClientTarget("mdc", "fs-MDT0000-mdc-cccc", "", "/proc/fs/lustre/mdc/fs-MDT0000-mdc-cccc/rpc_stats"),
+		wantClientTarget("mdc", "fs-MDT0001-mdc-dddd", "", "/sys/kernel/debug/lustre/mdc/fs-MDT0001-mdc-dddd/rpc_stats"),
 	}
 	if !reflect.DeepEqual(targets, want) {
 		t.Fatalf("targets mismatch\n got: %+v\nwant: %+v", targets, want)
@@ -256,8 +269,24 @@ func TestDiscoverClientsOrderDedupAndGlobFailures(t *testing.T) {
 }
 
 func TestDiscoverClientsNoMatchesReturnsNil(t *testing.T) {
+	// FakeReader returns (nil, nil) for every pattern it does not know.
+	targets, err := DiscoverClients(context.Background(), reader.NewFakeReader(), DefaultPathConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if targets != nil {
+		t.Fatalf("targets = %+v, want nil", targets)
+	}
+}
+
+// TestDiscoverClientsCancelledContextReturnsNil pins the current behavior on
+// purpose: a failed glob is skipped, also when it fails because the context
+// is cancelled, so a cancelled discovery returns (nil, nil) rather than
+// ctx.Err(). Update this test if DiscoverClients starts reporting
+// cancellation.
+func TestDiscoverClientsCancelledContextReturnsNil(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // every glob fails
+	cancel()
 	r := reader.NewFakeReader()
 	r.Globs["/proc/fs/lustre/osc/*/stats"] = []string{"/proc/fs/lustre/osc/fs-OST0000-osc-aaaa/stats"}
 
@@ -267,5 +296,21 @@ func TestDiscoverClientsNoMatchesReturnsNil(t *testing.T) {
 	}
 	if targets != nil {
 		t.Fatalf("targets = %+v, want nil", targets)
+	}
+}
+
+// wantClientTarget builds the expected target for component/name, with the
+// procfs and sysfs param roots discovery always assigns.
+func wantClientTarget(component, name, stats, rpc string) ClientTarget {
+	return ClientTarget{
+		Component:    component,
+		Name:         name,
+		StatsPath:    stats,
+		RpcStatsPath: rpc,
+		BasePath:     "/proc/fs/lustre/" + component + "/" + name,
+		ParamRoots: []string{
+			"/proc/fs/lustre/" + component + "/" + name,
+			"/sys/fs/lustre/" + component + "/" + name,
+		},
 	}
 }
