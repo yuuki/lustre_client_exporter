@@ -247,7 +247,8 @@ func (c *ClientCollector) collectRPCStats(ctx context.Context, t discovery.Clien
 }
 
 // collectClientParams reads the optional mdc or osc param files of the target.
-// An absent file is skipped; a malformed one fails only in strict mode.
+// An absent or unreadable file is skipped, even in strict mode; a malformed one
+// fails only in strict mode.
 func (c *ClientCollector) collectClientParams(ctx context.Context, t discovery.ClientTarget) ([]parser.Observation, error) {
 	var allObs []parser.Observation
 	for _, name := range clientParamFiles(t.Component) {

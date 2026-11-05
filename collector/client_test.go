@@ -6,12 +6,14 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/yuuki/lustre_client_exporter/internal/discovery"
+	"github.com/yuuki/lustre_client_exporter/internal/parser"
 	"github.com/yuuki/lustre_client_exporter/internal/reader"
 )
 
@@ -686,6 +688,20 @@ func TestClientCollector_RPCTargetSourceFailures(t *testing.T) {
 			dropped:   maxDirty,
 		},
 	}
+	// assertSkipped checks that only the failed source is missing: the log
+	// names it, its series is absent and the target's other sources are kept.
+	assertSkipped := func(t *testing.T, metrics []prometheus.Metric, logs string, wantLog string, kept []series, dropped series) {
+		t.Helper()
+		if !strings.Contains(logs, wantLog) {
+			t.Fatalf("log %q not found in:\n%s", wantLog, logs)
+		}
+		for _, s := range kept {
+			assertMetric(t, metrics, s.name, s.labels, s.value)
+		}
+		if hasMetric(t, metrics, dropped.name, dropped.labels) {
+			t.Fatalf("metric %s %v from the failed source is present", dropped.name, dropped.labels)
+		}
+	}
 	for _, tt := range tests {
 		t.Run(tt.name+"/non_strict", func(t *testing.T) {
 			r := newTestClientFakeReader(t)
@@ -696,15 +712,7 @@ func TestClientCollector_RPCTargetSourceFailures(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !strings.Contains(logs.String(), tt.wantLog) {
-				t.Fatalf("log %q not found in:\n%s", tt.wantLog, logs.String())
-			}
-			for _, s := range tt.kept {
-				assertMetric(t, metrics, s.name, s.labels, s.value)
-			}
-			if hasMetric(t, metrics, tt.dropped.name, tt.dropped.labels) {
-				t.Fatalf("metric %s %v from the failed source is present", tt.dropped.name, tt.dropped.labels)
-			}
+			assertSkipped(t, metrics, logs.String(), tt.wantLog, tt.kept, tt.dropped)
 		})
 		t.Run(tt.name+"/strict", func(t *testing.T) {
 			r := newTestClientFakeReader(t)
@@ -727,9 +735,7 @@ func TestClientCollector_RPCTargetSourceFailures(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !strings.Contains(logs.String(), tt.wantLog) {
-				t.Fatalf("log %q not found in:\n%s", tt.wantLog, logs.String())
-			}
+			assertSkipped(t, metrics, logs.String(), tt.wantLog, tt.kept, tt.dropped)
 		})
 	}
 }
@@ -803,4 +809,66 @@ func TestClientCollector_LLiteFailureSkipsOnlyThatTarget(t *testing.T) {
 	assertMetric(t, metrics, "lustre_stats_seconds_sum", map[string]string{
 		"component": "client", "target": "scratch-OST0000-osc-ffff0001", "type": "osc", "operation": "req_waittime",
 	}, 0.5)
+}
+
+func TestClientCollector_StrictReturnsFirstErrorInCollectionOrder(t *testing.T) {
+	const (
+		mdcDir = "/proc/fs/lustre/mdc/scratch-MDT0000-mdc-ffff0001/"
+		oscDir = "/proc/fs/lustre/osc/scratch-OST0000-osc-ffff0001/"
+	)
+	badStats := []byte("req_waittime notanumber samples [usec] 1 2 3\n")
+	_, parseErr := parser.ParseOBDStats(badStats, oscDir+"stats", "client", "scratch-OST0000-osc-ffff0001", "osc")
+	if parseErr == nil {
+		t.Fatal("malformed stats fixture parsed without error")
+	}
+	errFirst := errors.New("first failure")
+	errSecond := errors.New("second failure")
+
+	tests := []struct {
+		name   string
+		inject func(r *reader.FakeReader)
+		want   error
+	}{
+		{
+			// Within a target, stats are collected before rpc_stats.
+			name: "stats read error before rpc_stats read error",
+			inject: func(r *reader.FakeReader) {
+				r.Errors[oscDir+"stats"] = errFirst
+				r.Errors[oscDir+"rpc_stats"] = errSecond
+			},
+			want: errFirst,
+		},
+		{
+			name: "stats parse error before rpc_stats read error",
+			inject: func(r *reader.FakeReader) {
+				r.Files[oscDir+"stats"] = badStats
+				r.Errors[oscDir+"rpc_stats"] = errSecond
+			},
+			want: parseErr,
+		},
+		{
+			// Targets are collected in discovery order (mdc before osc) and
+			// the first failure ends the scrape.
+			name: "earlier target fails first",
+			inject: func(r *reader.FakeReader) {
+				r.Errors[mdcDir+"rpc_stats"] = errFirst
+				r.Errors[oscDir+"stats"] = errSecond
+			},
+			want: errFirst,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newTestClientFakeReader(t)
+			tt.inject(r)
+			c := NewClientCollectorWithStrict(r, discovery.DefaultPathConfig(), slog.New(slog.NewTextHandler(os.Stderr, nil)), true)
+			_, err := c.Collect(context.Background())
+			// Injected read errors must come back as the same value. The parse
+			// error is built by the parser, so it is compared by value: equal
+			// only if it was returned unwrapped.
+			if err != tt.want && !reflect.DeepEqual(err, tt.want) {
+				t.Fatalf("err = %v (%T), want %v (%T)", err, err, tt.want, tt.want)
+			}
+		})
+	}
 }
