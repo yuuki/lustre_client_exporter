@@ -251,88 +251,95 @@ func ParseLNetCtlNetNI(data []byte, source string) ([]Observation, error) {
 			if ni.NID == "" {
 				continue
 			}
-			labels := lnetBaseLabels()
-			labels["nid"] = ni.NID
-
-			if ni.Status != "" {
-				up := 0.0
-				if ni.Status == "up" || ni.Status == "UP" {
-					up = 1
-				}
-				observations = append(observations, Observation{
-					Collector:  "lnet",
-					Source:     source,
-					MetricID:   "lnet_ni_up",
-					MetricType: Gauge,
-					Labels:     labels,
-					Value:      up,
-				})
-			}
-
-			if ni.HealthStats == nil {
-				continue
-			}
-			hs := ni.HealthStats
-			observations = append(observations,
-				Observation{
-					Collector:  "lnet",
-					Source:     source,
-					MetricID:   "lnet_ni_health",
-					MetricType: Gauge,
-					Labels:     labels,
-					Value:      hs.HealthValue,
-				},
-				Observation{
-					Collector:  "lnet",
-					Source:     source,
-					MetricID:   "lnet_ni_health_interrupts_total",
-					MetricType: Counter,
-					Labels:     labels,
-					Value:      hs.Interrupts,
-				},
-				Observation{
-					Collector:  "lnet",
-					Source:     source,
-					MetricID:   "lnet_ni_health_dropped_total",
-					MetricType: Counter,
-					Labels:     labels,
-					Value:      hs.Dropped,
-				},
-				Observation{
-					Collector:  "lnet",
-					Source:     source,
-					MetricID:   "lnet_ni_health_aborted_total",
-					MetricType: Counter,
-					Labels:     labels,
-					Value:      hs.Aborted,
-				},
-				Observation{
-					Collector:  "lnet",
-					Source:     source,
-					MetricID:   "lnet_ni_health_no_route_total",
-					MetricType: Counter,
-					Labels:     labels,
-					Value:      hs.NoRoute,
-				},
-				Observation{
-					Collector:  "lnet",
-					Source:     source,
-					MetricID:   "lnet_ni_health_timeouts_total",
-					MetricType: Counter,
-					Labels:     labels,
-					Value:      hs.Timeouts,
-				},
-				Observation{
-					Collector:  "lnet",
-					Source:     source,
-					MetricID:   "lnet_ni_health_errors_total",
-					MetricType: Counter,
-					Labels:     labels,
-					Value:      hs.Error,
-				},
-			)
+			observations = append(observations, lnetNIObservations(source, ni.NID, ni.Status, ni.HealthStats)...)
 		}
 	}
 
 	return observations, nil
+}
+
+// lnetNIObservations returns the up gauge of a local NI, if it reports a
+// status, followed by its health series, if it reports health stats. All of
+// them share one label map.
+func lnetNIObservations(source, nid, status string, hs *healthStats) []Observation {
+	labels := lnetBaseLabels()
+	labels["nid"] = nid
+
+	var observations []Observation
+	if status != "" {
+		up := 0.0
+		if status == "up" || status == "UP" {
+			up = 1
+		}
+		observations = append(observations, Observation{
+			Collector:  "lnet",
+			Source:     source,
+			MetricID:   "lnet_ni_up",
+			MetricType: Gauge,
+			Labels:     labels,
+			Value:      up,
+		})
+	}
+
+	if hs == nil {
+		return observations
+	}
+	return append(observations,
+		Observation{
+			Collector:  "lnet",
+			Source:     source,
+			MetricID:   "lnet_ni_health",
+			MetricType: Gauge,
+			Labels:     labels,
+			Value:      hs.HealthValue,
+		},
+		Observation{
+			Collector:  "lnet",
+			Source:     source,
+			MetricID:   "lnet_ni_health_interrupts_total",
+			MetricType: Counter,
+			Labels:     labels,
+			Value:      hs.Interrupts,
+		},
+		Observation{
+			Collector:  "lnet",
+			Source:     source,
+			MetricID:   "lnet_ni_health_dropped_total",
+			MetricType: Counter,
+			Labels:     labels,
+			Value:      hs.Dropped,
+		},
+		Observation{
+			Collector:  "lnet",
+			Source:     source,
+			MetricID:   "lnet_ni_health_aborted_total",
+			MetricType: Counter,
+			Labels:     labels,
+			Value:      hs.Aborted,
+		},
+		Observation{
+			Collector:  "lnet",
+			Source:     source,
+			MetricID:   "lnet_ni_health_no_route_total",
+			MetricType: Counter,
+			Labels:     labels,
+			Value:      hs.NoRoute,
+		},
+		Observation{
+			Collector:  "lnet",
+			Source:     source,
+			MetricID:   "lnet_ni_health_timeouts_total",
+			MetricType: Counter,
+			Labels:     labels,
+			Value:      hs.Timeouts,
+		},
+		Observation{
+			Collector:  "lnet",
+			Source:     source,
+			MetricID:   "lnet_ni_health_errors_total",
+			MetricType: Counter,
+			Labels:     labels,
+			Value:      hs.Error,
+		},
+	)
 }

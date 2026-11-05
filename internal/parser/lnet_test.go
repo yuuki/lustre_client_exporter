@@ -1,7 +1,9 @@
 package parser
 
 import (
+	"fmt"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -255,5 +257,112 @@ func TestParseLNetParam_Unknown(t *testing.T) {
 	}
 	if len(obs) != 0 {
 		t.Errorf("got %d obs for unknown param, want 0", len(obs))
+	}
+}
+
+func lnetNIObs(metricID string, mt MetricType, nid string, v float64) Observation {
+	return Observation{Collector: "lnet", Source: "src", MetricID: metricID, MetricType: mt,
+		Labels: map[string]string{"component": "lnet", "target": "lnet", "nid": nid}, Value: v}
+}
+
+// lnetNIHealth returns the health series of one NI in emission order, with
+// values base, base+1, ... so that a swapped field shows up.
+func lnetNIHealth(nid string, base float64) []Observation {
+	return []Observation{
+		lnetNIObs("lnet_ni_health", Gauge, nid, base),
+		lnetNIObs("lnet_ni_health_interrupts_total", Counter, nid, base+1),
+		lnetNIObs("lnet_ni_health_dropped_total", Counter, nid, base+2),
+		lnetNIObs("lnet_ni_health_aborted_total", Counter, nid, base+3),
+		lnetNIObs("lnet_ni_health_no_route_total", Counter, nid, base+4),
+		lnetNIObs("lnet_ni_health_timeouts_total", Counter, nid, base+5),
+		lnetNIObs("lnet_ni_health_errors_total", Counter, nid, base+6),
+	}
+}
+
+// TestParseLNetCtlNetNI_Exact pins the complete output of ParseLNetCtlNetNI,
+// in order: NIs without a nid are skipped, the up gauge needs a status and is
+// 1 only for "up" or "UP", and the health series need health stats.
+func TestParseLNetCtlNetNI_Exact(t *testing.T) {
+	const health = `
+          health stats:
+              health value: %d
+              interrupts: %d
+              dropped: %d
+              aborted: %d
+              no route: %d
+              timeouts: %d
+              error: %d`
+	healthOf := func(base int) string {
+		return fmt.Sprintf(health, base, base+1, base+2, base+3, base+4, base+5, base+6)
+	}
+	yamlData := `
+net:
+    - net type: lo
+      local NI(s):
+        - nid: 0@lo
+          status: up
+    - net type: tcp
+      local NI(s):
+        - nid: ""
+          status: up` + healthOf(10) + `
+        - nid: 10.0.0.1@tcp
+          status: UP
+        - nid: 10.0.0.2@tcp
+          status: Up
+        - nid: 10.0.0.3@tcp
+          status: down` + healthOf(1000) + `
+        - nid: 10.0.0.4@tcp` + healthOf(2000) + `
+        - nid: 10.0.0.5@tcp
+    - net type: o2ib
+    - net type: o2ib1
+      local NI(s):
+        - nid: 10.0.1.1@o2ib1
+          status: up` + healthOf(3000) + `
+`
+	var wantYAML []Observation
+	wantYAML = append(wantYAML,
+		lnetNIObs("lnet_ni_up", Gauge, "0@lo", 1),
+		lnetNIObs("lnet_ni_up", Gauge, "10.0.0.1@tcp", 1),
+		lnetNIObs("lnet_ni_up", Gauge, "10.0.0.2@tcp", 0),
+		lnetNIObs("lnet_ni_up", Gauge, "10.0.0.3@tcp", 0),
+	)
+	wantYAML = append(wantYAML, lnetNIHealth("10.0.0.3@tcp", 1000)...)
+	wantYAML = append(wantYAML, lnetNIHealth("10.0.0.4@tcp", 2000)...)
+	wantYAML = append(wantYAML, lnetNIObs("lnet_ni_up", Gauge, "10.0.1.1@o2ib1", 1))
+	wantYAML = append(wantYAML, lnetNIHealth("10.0.1.1@o2ib1", 3000)...)
+
+	jsonData := `{"net":[{"local NI(s)":[{"nid":"1@tcp","status":"up","health stats":{"health value":5,"interrupts":6,"dropped":7,"aborted":8,"no route":9,"timeouts":10,"error":11}}]}]}`
+	wantJSON := append([]Observation{lnetNIObs("lnet_ni_up", Gauge, "1@tcp", 1)}, lnetNIHealth("1@tcp", 5)...)
+
+	tests := []struct {
+		name string
+		data string
+		want []Observation
+	}{
+		{name: "empty", data: "", want: nil},
+		{name: "no NIs", data: "net:\n    - net type: lo\n", want: nil},
+		{name: "only NIs without nid", data: "net:\n    - local NI(s):\n        - status: up\n", want: nil},
+		{name: "yaml", data: yamlData, want: wantYAML},
+		{name: "json", data: jsonData, want: wantJSON},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			obs, err := ParseLNetCtlNetNI([]byte(tt.data), "src")
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			assertObservations(t, obs, tt.want)
+		})
+	}
+}
+
+func TestParseLNetCtlNetNI_Malformed(t *testing.T) {
+	obs, err := ParseLNetCtlNetNI([]byte("net: [\n"), "src")
+	const prefix = "lnetctl net show NI: failed to parse as YAML ("
+	if err == nil || !strings.HasPrefix(err.Error(), prefix) || !strings.Contains(err.Error(), ") or JSON (") {
+		t.Fatalf("err = %v, want prefix %q", err, prefix)
+	}
+	if obs != nil {
+		t.Fatalf("got %d observations alongside the error, want nil", len(obs))
 	}
 }
