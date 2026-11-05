@@ -10,19 +10,11 @@ import (
 // Extracts pages_per_rpc, rpcs_in_flight, and offset sections.
 func ParseRPCStats(data []byte, source string, component string, target string, rpcType string) ([]Observation, error) {
 	var observations []Observation
+	var section rpcStatsSection
 
-	lines := strings.Split(string(data), "\n")
-	var section string
-	var sectionOperation string
-	var pendingSectionOperation string
-
-	for _, line := range lines {
+	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-
-		if strings.HasPrefix(line, "snapshot_time") {
+		if line == "" || strings.HasPrefix(line, "snapshot_time") {
 			continue
 		}
 
@@ -43,72 +35,73 @@ func ParseRPCStats(data []byte, source string, component string, target string, 
 			})
 		}
 
-		// Detect section headers
-		switch {
-		case line == "modify":
-			pendingSectionOperation = "modify"
-			continue
-		case strings.HasPrefix(line, "pages per rpc"):
-			section = "pages_per_rpc"
-			sectionOperation = ""
-			pendingSectionOperation = ""
-			continue
-		case strings.HasPrefix(line, "rpcs in flight"):
-			section = "rpcs_in_flight"
-			sectionOperation = pendingSectionOperation
-			pendingSectionOperation = ""
-			continue
-		case strings.HasPrefix(line, "dio read RPCs in flight:"):
-			section = "rpcs_in_flight"
-			sectionOperation = "dio_read"
-			pendingSectionOperation = ""
-			continue
-		case strings.HasPrefix(line, "dio write RPCs in flight:"):
-			section = "rpcs_in_flight"
-			sectionOperation = "dio_write"
-			pendingSectionOperation = ""
-			continue
-		case strings.HasPrefix(line, "read RPCs in flight:"):
-			section = "rpcs_in_flight"
-			sectionOperation = "read"
-			pendingSectionOperation = ""
-			continue
-		case strings.HasPrefix(line, "write RPCs in flight:"):
-			section = "rpcs_in_flight"
-			sectionOperation = "write"
-			pendingSectionOperation = ""
-			continue
-		case strings.HasPrefix(line, "offset"):
-			section = "rpcs_offset"
-			sectionOperation = ""
-			pendingSectionOperation = ""
-			continue
-		case strings.Contains(line, "read") && strings.Contains(line, "write"):
-			// Column header line
-			pendingSectionOperation = ""
+		// A subsection header such as "read RPCs in flight: 0" is also a
+		// scalar. Neither headers nor scalars are histogram buckets.
+		isHeader := section.applyHeader(line)
+		if isHeader || isScalar || section.name == "" || !isRPCBucketLine(line) {
 			continue
 		}
 
-		if isScalar {
-			// pending/modify scalars are not histogram section headers
-			continue
-		}
-
-		if section == "" {
-			continue
-		}
-		if !isRPCBucketLine(line) {
-			continue
-		}
-
-		obs, err := parseRPCLine(line, source, component, target, rpcType, section, sectionOperation)
+		obs, err := parseRPCLine(line, source, component, target, rpcType, section.name, section.operation)
 		if err != nil {
-			return nil, fmt.Errorf("rpc stats %s: %q: %w", section, line, err)
+			return nil, fmt.Errorf("rpc stats %s: %q: %w", section.name, line, err)
 		}
 		observations = append(observations, obs...)
 	}
 
 	return observations, nil
+}
+
+// rpcStatsSection tracks the histogram that the bucket lines of an rpc_stats
+// file belong to.
+type rpcStatsSection struct {
+	// name is "pages_per_rpc", "rpcs_in_flight" or "rpcs_offset", or empty
+	// before the first section header.
+	name string
+	// operation labels the value of a bucket line without a write column;
+	// empty means "read".
+	operation string
+	// pendingOperation is the operation that a lone "modify" line announces
+	// for the next "rpcs in flight" header.
+	pendingOperation string
+}
+
+// applyHeader updates s if line is a section, subsection or column header and
+// reports whether it was one. The prefixes are checked before the column
+// header test, so "offset  read  write" opens the offset section.
+func (s *rpcStatsSection) applyHeader(line string) bool {
+	switch {
+	case line == "modify":
+		s.pendingOperation = "modify"
+	case strings.HasPrefix(line, "pages per rpc"):
+		s.enter("pages_per_rpc", "")
+	case strings.HasPrefix(line, "rpcs in flight"):
+		s.enter("rpcs_in_flight", s.pendingOperation)
+	case strings.HasPrefix(line, "dio read RPCs in flight:"):
+		s.enter("rpcs_in_flight", "dio_read")
+	case strings.HasPrefix(line, "dio write RPCs in flight:"):
+		s.enter("rpcs_in_flight", "dio_write")
+	case strings.HasPrefix(line, "read RPCs in flight:"):
+		s.enter("rpcs_in_flight", "read")
+	case strings.HasPrefix(line, "write RPCs in flight:"):
+		s.enter("rpcs_in_flight", "write")
+	case strings.HasPrefix(line, "offset"):
+		s.enter("rpcs_offset", "")
+	case strings.Contains(line, "read") && strings.Contains(line, "write"):
+		// Column header line
+		s.pendingOperation = ""
+	default:
+		return false
+	}
+	return true
+}
+
+// enter starts the section name, whose single-column buckets belong to
+// operation, and drops any pending operation.
+func (s *rpcStatsSection) enter(name, operation string) {
+	s.name = name
+	s.operation = operation
+	s.pendingOperation = ""
 }
 
 func parseRPCScalar(line string) (metricID, operation string, value float64, ok bool) {
@@ -165,50 +158,14 @@ func parseRPCLine(line, source, component, target, rpcType, section, singleOpera
 	if err != nil {
 		return nil, err
 	}
-	writeIndex := 4
-	if len(fields) > writeIndex && fields[writeIndex] == "|" {
-		writeIndex++
-	}
-	var writeVal float64
-	hasWrite := len(fields) > writeIndex
-	if hasWrite {
-		writeVal, err = strconv.ParseFloat(fields[writeIndex], 64)
-		if err != nil {
-			return nil, err
-		}
+	writeVal, hasWrite, err := parseRPCWriteValue(fields)
+	if err != nil {
+		return nil, err
 	}
 
-	var metricID string
-	switch section {
-	case "pages_per_rpc":
-		metricID = "pages_per_rpc_total"
-	case "rpcs_in_flight":
-		metricID = "rpcs_in_flight"
-	case "rpcs_offset":
-		metricID = "rpcs_offset"
-	}
-
+	metricID, mt := rpcSectionMetric(section)
 	var observations []Observation
-	operations := []struct {
-		name  string
-		value float64
-	}{
-		{"read", readVal},
-		{"write", writeVal},
-	}
-	if !hasWrite && singleOperation != "" {
-		operations = []struct {
-			name  string
-			value float64
-		}{
-			{singleOperation, readVal},
-		}
-	}
-	for _, op := range operations {
-		if op.name == "write" && !hasWrite && singleOperation == "" {
-			continue
-		}
-
+	for _, op := range rpcLineOperations(readVal, writeVal, hasWrite, singleOperation) {
 		labels := map[string]string{
 			"component": component,
 			"target":    target,
@@ -218,11 +175,6 @@ func parseRPCLine(line, source, component, target, rpcType, section, singleOpera
 
 		if section == "rpcs_in_flight" {
 			labels["type"] = rpcType
-		}
-
-		mt := Counter
-		if section == "rpcs_in_flight" || section == "rpcs_offset" {
-			mt = Gauge
 		}
 
 		observations = append(observations, Observation{
@@ -236,4 +188,53 @@ func parseRPCLine(line, source, component, target, rpcType, section, singleOpera
 	}
 
 	return observations, nil
+}
+
+// parseRPCWriteValue parses the write column of a bucket line: the field
+// after the three read columns and an optional "|". ok is false when the line
+// has no write column.
+func parseRPCWriteValue(fields []string) (value float64, ok bool, err error) {
+	writeIndex := 4
+	if len(fields) > writeIndex && fields[writeIndex] == "|" {
+		writeIndex++
+	}
+	if len(fields) <= writeIndex {
+		return 0, false, nil
+	}
+	value, err = strconv.ParseFloat(fields[writeIndex], 64)
+	return value, true, err
+}
+
+// rpcOperationValue is one value column of a bucket line.
+type rpcOperationValue struct {
+	name  string
+	value float64
+}
+
+// rpcLineOperations returns the values a bucket line reports: read and write
+// when it has a write column, otherwise its read value under singleOperation,
+// or under "read" when the section has no single operation.
+func rpcLineOperations(readVal, writeVal float64, hasWrite bool, singleOperation string) []rpcOperationValue {
+	switch {
+	case hasWrite:
+		return []rpcOperationValue{{"read", readVal}, {"write", writeVal}}
+	case singleOperation != "":
+		return []rpcOperationValue{{singleOperation, readVal}}
+	default:
+		return []rpcOperationValue{{"read", readVal}}
+	}
+}
+
+// rpcSectionMetric returns the metric ID and type of the buckets of section.
+func rpcSectionMetric(section string) (string, MetricType) {
+	switch section {
+	case "pages_per_rpc":
+		return "pages_per_rpc_total", Counter
+	case "rpcs_in_flight":
+		return "rpcs_in_flight", Gauge
+	case "rpcs_offset":
+		return "rpcs_offset", Gauge
+	default:
+		return "", Counter
+	}
 }
