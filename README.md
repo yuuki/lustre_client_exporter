@@ -116,11 +116,23 @@ each public metric family, including PromQL examples for client-side RCA.
 make build    # Build the binary
 make test     # Run tests
 make vet      # Run go vet
+make complexity  # Rank the most complex functions (needs cccc, see below)
 ```
 
 ```sh
 go test -race ./...   # Test with race detector
 ```
+
+### Code complexity
+
+CI measures Cognitive and Cyclomatic Complexity with
+[cccc](https://github.com/moznion/cccc) on pull requests and pushes to `main`
+and writes the totals and the 20 most complex functions to the job summary
+(`.github/workflows/complexity.yml`). It only reports; no complexity
+threshold fails the build. `cccc.toml` sets what is analyzed: tests, generated
+code and vendored sources are excluded. To see the same ranking locally,
+install cccc (a [release binary](https://github.com/moznion/cccc/releases) or
+`cargo install cccc-cli`) and run `make complexity`.
 
 ## License
 
