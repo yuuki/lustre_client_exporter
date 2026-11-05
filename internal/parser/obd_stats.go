@@ -21,56 +21,71 @@ func ParseOBDStats(data []byte, source, component, target, typ string) ([]Observ
 		if len(fields) < 2 || fields[0] == "snapshot_time" {
 			continue
 		}
-		name := fields[0]
-		if name == "read_bytes" || name == "write_bytes" {
-			obs, err := parseBytesStat(fields, source, component, target)
-			if err != nil {
-				return nil, fmt.Errorf("obd stats %s: %w", name, err)
-			}
-			observations = append(observations, obs...)
-			continue
-		}
-		count, err := strconv.ParseFloat(fields[1], 64)
+		obs, err := parseOBDStatLine(fields, source, component, target, typ)
 		if err != nil {
-			return nil, fmt.Errorf("obd stats %s: parsing count: %w", name, err)
+			return nil, err
 		}
-		base := map[string]string{
-			"component": component,
-			"target":    target,
-			"operation": name,
-		}
-		observations = append(observations, Observation{
-			Collector:  "client",
-			Source:     source,
-			MetricID:   "stats_total",
-			MetricType: Counter,
-			Labels:     base,
-			Value:      count,
-		})
-		unit, sum, ok := statsSum(fields)
-		if !ok {
-			continue
-		}
-		seconds, ok := unitToSeconds(unit, sum)
-		if !ok {
-			continue
-		}
-		labels := map[string]string{
-			"component": component,
-			"target":    target,
-			"type":      typ,
-			"operation": name,
-		}
-		observations = append(observations, Observation{
-			Collector:  "client",
-			Source:     source,
-			MetricID:   "stats_seconds_sum",
-			MetricType: Counter,
-			Labels:     labels,
-			Value:      seconds,
-		})
+		observations = append(observations, obs...)
 	}
 	return observations, nil
+}
+
+// parseOBDStatLine parses the fields of one named stats line, which has at
+// least a name and a count.
+func parseOBDStatLine(fields []string, source, component, target, typ string) ([]Observation, error) {
+	name := fields[0]
+	if name == "read_bytes" || name == "write_bytes" {
+		obs, err := parseBytesStat(fields, source, component, target)
+		if err != nil {
+			return nil, fmt.Errorf("obd stats %s: %w", name, err)
+		}
+		return obs, nil
+	}
+	count, err := strconv.ParseFloat(fields[1], 64)
+	if err != nil {
+		return nil, fmt.Errorf("obd stats %s: parsing count: %w", name, err)
+	}
+	base := map[string]string{
+		"component": component,
+		"target":    target,
+		"operation": name,
+	}
+	observations := []Observation{{
+		Collector:  "client",
+		Source:     source,
+		MetricID:   "stats_total",
+		MetricType: Counter,
+		Labels:     base,
+		Value:      count,
+	}}
+	seconds, ok := statsSecondsSum(fields)
+	if !ok {
+		return observations, nil
+	}
+	labels := map[string]string{
+		"component": component,
+		"target":    target,
+		"type":      typ,
+		"operation": name,
+	}
+	return append(observations, Observation{
+		Collector:  "client",
+		Source:     source,
+		MetricID:   "stats_seconds_sum",
+		MetricType: Counter,
+		Labels:     labels,
+		Value:      seconds,
+	}), nil
+}
+
+// statsSecondsSum returns the sum of a time-unit stats line in seconds; ok is
+// false when the line has no sum or its unit is not a time unit.
+func statsSecondsSum(fields []string) (float64, bool) {
+	unit, sum, ok := statsSum(fields)
+	if !ok {
+		return 0, false
+	}
+	return unitToSeconds(unit, sum)
 }
 
 // statsSum reads optional "samples [unit] min max sum [sumsq]".
