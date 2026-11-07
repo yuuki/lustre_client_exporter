@@ -2,10 +2,13 @@ package collector
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"os"
 	"testing"
+	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/yuuki/lustre_client_exporter/internal/discovery"
 	"github.com/yuuki/lustre_client_exporter/internal/reader"
 )
@@ -76,4 +79,30 @@ func TestLNetCollector_Auto_FallsBackToLNetCtl(t *testing.T) {
 	if len(metrics) != 11 {
 		t.Errorf("got %d metrics, want 11 (stats only, no params)", len(metrics))
 	}
+}
+
+// A source line whose operation name is not valid UTF-8 (a corrupt or foreign
+// file) must fail only its collector. It used to panic in the emitter, inside
+// a scrape goroutine, which crashed the whole exporter.
+func TestRegistry_InvalidUTF8LabelFailsOnlyItsCollector(t *testing.T) {
+	r := reader.NewFakeReader()
+	r.Files["/sys/fs/lustre/health_check"] = []byte("healthy\n")
+	r.Files["/proc/fs/lustre/ldlm/services/ldlm_cbd/stats"] = []byte("ldlm_bl_callback\xff 1 samples [usec] 1 2 3\n")
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	registry := NewRegistry(logger, time.Second, time.Second,
+		NewHealthCollector(r, discovery.DefaultPathConfig()),
+		NewClientCollector(r, discovery.DefaultPathConfig(), logger),
+	)
+	ch := make(chan prometheus.Metric, 16)
+
+	registry.Collect(ch)
+	close(ch)
+
+	var metrics []prometheus.Metric
+	for m := range ch {
+		metrics = append(metrics, m)
+	}
+	assertMetric(t, metrics, "lustre_scrape_collector_success", map[string]string{"collector": "client"}, 0)
+	assertMetric(t, metrics, "lustre_scrape_collector_success", map[string]string{"collector": "health"}, 1)
+	assertMetric(t, metrics, "lustre_health_check", map[string]string{"component": "health", "target": "lustre"}, 1)
 }

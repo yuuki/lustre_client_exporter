@@ -6,7 +6,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 )
+
+// commandWaitDelay bounds how long RunCommand waits for the output of a
+// command to close once its context is done (or the command has exited).
+// Cancellation kills only the direct child: when that is a wrapper shell
+// script, its own child, such as a hung lnetctl, inherits stdout and would
+// otherwise block the scrape until it exits, past every timeout.
+const commandWaitDelay = time.Second
 
 // Reader abstracts file system reads and command execution for testability.
 type Reader interface {
@@ -97,6 +105,7 @@ func (r *FSReader) Glob(ctx context.Context, pattern string) ([]string, error) {
 
 func (r *FSReader) RunCommand(ctx context.Context, name string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.WaitDelay = commandWaitDelay
 	return cmd.Output()
 }
 

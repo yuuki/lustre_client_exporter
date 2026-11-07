@@ -45,5 +45,5 @@ func (c *LpccCollector) Collect(ctx context.Context) ([]prometheus.Metric, error
 	if err != nil {
 		return nil, err
 	}
-	return emitter.Emit(mapped), nil
+	return emitter.Emit(mapped)
 }

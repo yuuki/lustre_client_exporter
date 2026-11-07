@@ -40,5 +40,5 @@ func (c *SptlrpcCollector) Collect(ctx context.Context) ([]prometheus.Metric, er
 		return nil, err
 	}
 
-	return emitter.Emit(mapped), nil
+	return emitter.Emit(mapped)
 }

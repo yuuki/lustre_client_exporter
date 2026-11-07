@@ -1,6 +1,7 @@
 package emitter
 
 import (
+	"strings"
 	"testing"
 
 	dto "github.com/prometheus/client_model/go"
@@ -21,7 +22,10 @@ func TestEmit_HealthGauge(t *testing.T) {
 		},
 	}
 
-	metrics := Emit(mapped)
+	metrics, err := Emit(mapped)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(metrics) != 1 {
 		t.Fatalf("got %d metrics, want 1", len(metrics))
 	}
@@ -49,7 +53,10 @@ func TestEmit_Counter(t *testing.T) {
 		},
 	}
 
-	metrics := Emit(mapped)
+	metrics, err := Emit(mapped)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(metrics) != 1 {
 		t.Fatalf("got %d metrics, want 1", len(metrics))
 	}
@@ -79,3 +86,29 @@ func TestEmit_Counter(t *testing.T) {
 	}
 }
 
+// A label value that is not valid UTF-8 can come from a corrupt source file.
+// It must fail Emit with an error, not panic: Emit runs inside the collector
+// goroutines of a scrape, where a panic crashes the exporter.
+func TestEmit_InvalidUTF8LabelValueReturnsError(t *testing.T) {
+	def := mapper.MetricDef{
+		Name:      "lustre_stats_total",
+		Help:      "Number of operations.",
+		Type:      parser.Counter,
+		LabelKeys: []string{"component", "target", "operation"},
+	}
+	mapped := []mapper.MappedObservation{
+		{Def: def, LabelVals: []string{"client", "scratch-ffff0001", "open"}, Value: 1},
+		{Def: def, LabelVals: []string{"client", "scratch-ffff0001", "op\xff"}, Value: 2},
+	}
+
+	metrics, err := Emit(mapped)
+	if err == nil {
+		t.Fatal("expected an error for a label value that is not valid UTF-8")
+	}
+	if !strings.Contains(err.Error(), "lustre_stats_total") {
+		t.Errorf("error %q does not name the metric", err)
+	}
+	if metrics != nil {
+		t.Errorf("got %d metrics alongside the error, want nil", len(metrics))
+	}
+}

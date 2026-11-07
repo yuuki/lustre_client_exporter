@@ -17,7 +17,7 @@ import (
 	"github.com/yuuki/lustre_client_exporter/internal/reader"
 )
 
-func newTestClientFakeReader(t *testing.T) *reader.FakeReader {
+func newTestClientFakeReader(t testing.TB) *reader.FakeReader {
 	t.Helper()
 	r := reader.NewFakeReader()
 
@@ -82,7 +82,7 @@ func newTestClientFakeReader(t *testing.T) *reader.FakeReader {
 	return r
 }
 
-func loadFixture(t *testing.T, r *reader.FakeReader, targetPath, fixturePath string) {
+func loadFixture(t testing.TB, r *reader.FakeReader, targetPath, fixturePath string) {
 	t.Helper()
 	data, err := os.ReadFile(fixturePath)
 	if err != nil {
@@ -756,7 +756,7 @@ func TestClientCollector_StrictReturnsUnwrappedReadError(t *testing.T) {
 				}
 				return
 			}
-			if err != errDenied {
+			if err != errDenied { //nolint:errorlint // asserts the error is returned unwrapped, which errors.Is would accept
 				t.Fatalf("err = %v, want the read error itself", err)
 			}
 		})
@@ -866,7 +866,7 @@ func TestClientCollector_StrictReturnsFirstErrorInCollectionOrder(t *testing.T) 
 			// Injected read errors must come back as the same value. The parse
 			// error is built by the parser, so it is compared by value: equal
 			// only if it was returned unwrapped.
-			if err != tt.want && !reflect.DeepEqual(err, tt.want) {
+			if err != tt.want && !reflect.DeepEqual(err, tt.want) { //nolint:errorlint // asserts the error is returned unwrapped, which errors.Is would accept
 				t.Fatalf("err = %v (%T), want %v (%T)", err, err, tt.want, tt.want)
 			}
 		})

@@ -87,7 +87,7 @@ func (c *ClientCollector) Collect(ctx context.Context) ([]prometheus.Metric, err
 	if err != nil {
 		return nil, err
 	}
-	return emitter.Emit(mapped), nil
+	return emitter.Emit(mapped)
 }
 
 // collectTarget collects one discovered target according to its component.

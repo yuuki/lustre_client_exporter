@@ -1,6 +1,7 @@
 package emitter
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 
@@ -33,8 +34,12 @@ func getDesc(def mapper.MetricDef) *prometheus.Desc {
 	return d
 }
 
-// Emit converts mapped observations into Prometheus metrics.
-func Emit(mapped []mapper.MappedObservation) []prometheus.Metric {
+// Emit converts mapped observations into Prometheus metrics. An observation
+// that cannot form a valid series, such as one whose label value read from a
+// corrupt source is not valid UTF-8, fails the whole call with an error rather
+// than a panic: collectors run in goroutines of the scrape, where a panic
+// would crash the exporter.
+func Emit(mapped []mapper.MappedObservation) ([]prometheus.Metric, error) {
 	metrics := make([]prometheus.Metric, 0, len(mapped))
 	for _, m := range mapped {
 		var vt prometheus.ValueType
@@ -48,8 +53,11 @@ func Emit(mapped []mapper.MappedObservation) []prometheus.Metric {
 		}
 
 		desc := getDesc(m.Def)
-		metric := prometheus.MustNewConstMetric(desc, vt, m.Value, m.LabelVals...)
+		metric, err := prometheus.NewConstMetric(desc, vt, m.Value, m.LabelVals...)
+		if err != nil {
+			return nil, fmt.Errorf("emit %s: %w", m.Def.Name, err)
+		}
 		metrics = append(metrics, metric)
 	}
-	return metrics
+	return metrics, nil
 }

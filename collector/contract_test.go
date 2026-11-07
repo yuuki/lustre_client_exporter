@@ -252,7 +252,7 @@ func TestContract_MetricTypes(t *testing.T) {
 }
 
 // newFullFakeReader creates a FakeReader loaded with all test fixtures.
-func newFullFakeReader(t *testing.T) *reader.FakeReader {
+func newFullFakeReader(t testing.TB) *reader.FakeReader {
 	t.Helper()
 	r := newTestClientFakeReader(t)
 

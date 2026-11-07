@@ -3,6 +3,7 @@ package collector
 import (
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"os"
 	"testing"
@@ -149,5 +150,52 @@ func TestRegistryAggregatesScrapeDurationBySource(t *testing.T) {
 
 	if matches != 1 {
 		t.Fatalf("got %d sys scrape duration summaries, want 1", matches)
+	}
+}
+
+// blockingCollector blocks until its context is done, like a source read that
+// hangs until the timeout cancels it.
+type blockingCollector struct{}
+
+func (blockingCollector) Name() string { return "blocking" }
+
+func (blockingCollector) Collect(ctx context.Context) ([]prometheus.Metric, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+// The scrape and source timeouts must each bound a collector that waits on its
+// context, fail only that collector, and let the others report.
+func TestRegistryTimeoutsBoundBlockingCollector(t *testing.T) {
+	tests := []struct {
+		name          string
+		scrapeTimeout time.Duration
+		sourceTimeout time.Duration
+	}{
+		{name: "source timeout", scrapeTimeout: time.Minute, sourceTimeout: 50 * time.Millisecond},
+		{name: "scrape timeout", scrapeTimeout: 50 * time.Millisecond, sourceTimeout: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+			registry := NewRegistry(logger, tt.scrapeTimeout, tt.sourceTimeout, blockingCollector{}, noopCollector{})
+			ch := make(chan prometheus.Metric, 16)
+
+			start := time.Now()
+			registry.Collect(ch)
+			elapsed := time.Since(start)
+			close(ch)
+
+			// Generous slack for a loaded machine; the timeout is 50ms.
+			if limit := 10 * time.Second; elapsed > limit {
+				t.Fatalf("Collect returned after %v, want at most %v", elapsed, limit)
+			}
+			var metrics []prometheus.Metric
+			for m := range ch {
+				metrics = append(metrics, m)
+			}
+			assertMetric(t, metrics, "lustre_scrape_collector_success", map[string]string{"collector": "blocking"}, 0)
+			assertMetric(t, metrics, "lustre_scrape_collector_success", map[string]string{"collector": "procfs"}, 1)
+		})
 	}
 }
