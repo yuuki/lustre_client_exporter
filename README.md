@@ -113,15 +113,19 @@ each public metric family, including PromQL examples for client-side RCA.
 ## Development
 
 ```sh
-make build    # Build the binary
-make test     # Run tests
-make vet      # Run go vet
+make build       # Build the binary
+make test        # Run tests
+make check       # Pre-PR gate: lint, workflow audit, race tests, build
+make test-fuzz   # Fuzz every parser (FUZZTIME=30s each)
+make bench       # Parser and scrape benchmarks into bench.txt
+make vuln        # govulncheck
 make complexity  # Rank the most complex functions (needs cccc, see below)
 ```
 
-```sh
-go test -race ./...   # Test with race detector
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to propose changes and
+[AGENTS.md](AGENTS.md) for the conventions and the compatibility
+contracts. Report vulnerabilities as described in
+[SECURITY.md](SECURITY.md).
 
 ### Code complexity
 

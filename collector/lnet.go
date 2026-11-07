@@ -80,7 +80,7 @@ func (c *LNetCollector) Collect(ctx context.Context) ([]prometheus.Metric, error
 	if err != nil {
 		return nil, err
 	}
-	return emitter.Emit(mapped), nil
+	return emitter.Emit(mapped)
 }
 
 func (c *LNetCollector) collectFromDebugFS(ctx context.Context) ([]parser.Observation, error) {

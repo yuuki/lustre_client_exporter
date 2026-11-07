@@ -4,7 +4,7 @@ package parser
 type MetricType int
 
 const (
-	Gauge   MetricType = iota
+	Gauge MetricType = iota
 	Counter
 	Untyped
 )

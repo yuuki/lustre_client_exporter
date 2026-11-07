@@ -788,7 +788,7 @@ series is often a skipped file, not a failed collector.
 
 | Outcome | When |
 |---|---|
-| Always a collector error (success `0`; strict fails the scrape) | Health, sptlrpc, or LNet primary-source/parse error. LPCC JSON or mapper error. Mapper error. |
+| Always a collector error (success `0`; strict fails the scrape) | Health, sptlrpc, or LNet primary-source/parse error. LPCC JSON or mapper error. Mapper error. Emitter error: a label value read from a source (an operation, bucket, state or NID) is not valid UTF-8, which fails that whole collector. |
 | Strict: collector error. Non-strict: warn, success `1` | Client discovered `stats` read/parse error. `rpc_stats` read error other than not-exist. `rpc_stats` parse error. Optional-file parse error. LDLM parse error. |
 | Skip even in strict, success `1` | Missing or unreadable optional llite/OSC/MDC files. `rpc_stats` not found. Missing `ldlm_cbd`. Missing LNet params or LNet param parse failure. Failed `lnetctl net show` after a successful `stats show` (explicit `lnetctl` or `auto` supplemental). `lpcc` command failure. Zero discovered client mounts. |
 

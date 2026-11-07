@@ -21,21 +21,21 @@ func TestParseEncryptPagePools(t *testing.T) {
 	}
 
 	expected := map[string]float64{
-		"physical_pages":               262144,
-		"pages_per_pool":               256,
-		"maximum_pages":                65536,
-		"maximum_pools":                256,
-		"pages_in_pools":               1024,
-		"free_pages":                   512,
-		"maximum_pages_reached_total":  2048,
-		"grows_total":                  10,
-		"grows_failure_total":          1,
-		"shrinks_total":                5,
-		"cache_access_total":           50000,
-		"cache_miss_total":             100,
-		"free_page_low":                0,
-		"maximum_waitqueue_depth":      3,
-		"out_of_memory_request_total":  0,
+		"physical_pages":              262144,
+		"pages_per_pool":              256,
+		"maximum_pages":               65536,
+		"maximum_pools":               256,
+		"pages_in_pools":              1024,
+		"free_pages":                  512,
+		"maximum_pages_reached_total": 2048,
+		"grows_total":                 10,
+		"grows_failure_total":         1,
+		"shrinks_total":               5,
+		"cache_access_total":          50000,
+		"cache_miss_total":            100,
+		"free_page_low":               0,
+		"maximum_waitqueue_depth":     3,
+		"out_of_memory_request_total": 0,
 	}
 
 	found := map[string]float64{}

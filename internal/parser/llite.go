@@ -118,22 +118,22 @@ var lliteSingleFileMap = map[string]struct {
 	metricID   string
 	metricType MetricType
 }{
-	"blocksize":                 {"blocksize_bytes", Gauge},
-	"filesfree":                 {"inodes_free", Gauge},
-	"filestotal":                {"inodes_maximum", Gauge},
-	"kbytesavail":               {"available_kibibytes", Gauge},
-	"kbytesfree":                {"free_kibibytes", Gauge},
-	"kbytestotal":               {"capacity_kibibytes", Gauge},
-	"checksum_pages":            {"checksum_pages_enabled", Gauge},
-	"default_easize":            {"default_ea_size_bytes", Gauge},
-	"lazystatfs":                {"lazystatfs_enabled", Gauge},
-	"max_easize":                {"maximum_ea_size_bytes", Gauge},
-	"max_read_ahead_mb":         {"maximum_read_ahead_megabytes", Gauge},
+	"blocksize":                  {"blocksize_bytes", Gauge},
+	"filesfree":                  {"inodes_free", Gauge},
+	"filestotal":                 {"inodes_maximum", Gauge},
+	"kbytesavail":                {"available_kibibytes", Gauge},
+	"kbytesfree":                 {"free_kibibytes", Gauge},
+	"kbytestotal":                {"capacity_kibibytes", Gauge},
+	"checksum_pages":             {"checksum_pages_enabled", Gauge},
+	"default_easize":             {"default_ea_size_bytes", Gauge},
+	"lazystatfs":                 {"lazystatfs_enabled", Gauge},
+	"max_easize":                 {"maximum_ea_size_bytes", Gauge},
+	"max_read_ahead_mb":          {"maximum_read_ahead_megabytes", Gauge},
 	"max_read_ahead_per_file_mb": {"maximum_read_ahead_per_file_megabytes", Gauge},
-	"max_read_ahead_whole_mb":   {"maximum_read_ahead_whole_megabytes", Gauge},
-	"statahead_agl":             {"statahead_agl_enabled", Gauge},
-	"statahead_max":             {"statahead_maximum", Gauge},
-	"xattr_cache":               {"xattr_cache_enabled", Gauge},
+	"max_read_ahead_whole_mb":    {"maximum_read_ahead_whole_megabytes", Gauge},
+	"statahead_agl":              {"statahead_agl_enabled", Gauge},
+	"statahead_max":              {"statahead_maximum", Gauge},
+	"xattr_cache":                {"xattr_cache_enabled", Gauge},
 }
 
 // ParseLLiteSingleFile parses a single-value llite file (capacity or tunable).

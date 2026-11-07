@@ -1,2 +1,4 @@
 /lustre_client_exporter
 /dist
+# make bench
+/bench.txt

@@ -17,6 +17,11 @@ import (
 
 var version = "dev"
 
+// readHeaderTimeout bounds how long a client may take to send its request
+// headers, so that stalled connections (slowloris) cannot pile up and exhaust
+// file descriptors. It does not limit how long a scrape may take.
+const readHeaderTimeout = 10 * time.Second
+
 // Config holds all CLI flag values.
 type Config struct {
 	// Web
@@ -171,7 +176,8 @@ func run() int {
 	})
 
 	logger.Info("starting lustre_client_exporter", "address", cfg.ListenAddress, "version", version)
-	if err := http.ListenAndServe(cfg.ListenAddress, nil); err != nil {
+	server := &http.Server{Addr: cfg.ListenAddress, ReadHeaderTimeout: readHeaderTimeout}
+	if err := server.ListenAndServe(); err != nil {
 		logger.Error("failed to start server", "error", err)
 		return 1
 	}

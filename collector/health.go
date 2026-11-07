@@ -42,5 +42,5 @@ func (c *HealthCollector) Collect(ctx context.Context) ([]prometheus.Metric, err
 		return nil, err
 	}
 
-	return emitter.Emit(mapped), nil
+	return emitter.Emit(mapped)
 }
