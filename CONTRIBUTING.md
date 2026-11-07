@@ -21,11 +21,11 @@ client-side metrics are welcome.
 
   It runs the linters, the workflow audit, the tests with the race detector
   and the build. When you change a parser, also run `make test-fuzz` and
-  `make bench`. [AGENTS.md](AGENTS.md) lists every command and the conventions.
+  `make bench`. [AGENTS.md](AGENTS.md) has the conventions.
 - **Docs**: a change to metrics, flags or failure behaviour updates `README.md`
   and `docs/metrics.md` (and `docs/design.md` where it applies).
-- **Commits**: short scoped subjects such as `collector: ...`, `parser: ...`,
-  `build: ...`, `ci: ...` or `docs: ...`, with the reason in the body.
+- **Commits, branches and pull request titles** follow the Git conventions
+  in [AGENTS.md](AGENTS.md#git-conventions).
 
 By contributing you agree that your contribution is licensed under the
 Apache License 2.0.

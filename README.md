@@ -123,8 +123,8 @@ make complexity  # Rank the most complex functions (needs cccc, see below)
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how to propose changes and
-[AGENTS.md](AGENTS.md) for every command, the conventions and the
-compatibility contracts. Report vulnerabilities as described in
+[AGENTS.md](AGENTS.md) for the conventions and the compatibility
+contracts. Report vulnerabilities as described in
 [SECURITY.md](SECURITY.md).
 
 ### Code complexity
