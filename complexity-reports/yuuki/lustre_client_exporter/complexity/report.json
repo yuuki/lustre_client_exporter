@@ -1,9 +1,9 @@
 {
   "repository": "yuuki/lustre_client_exporter/complexity",
   "ref": "refs/heads/main",
-  "commit": "787e1064359ab835c92e7e80406ee828fd3d9acf",
+  "commit": "975e525a94a762210ccddc28890fa1fa8f3822c9",
   "base_ref": "refs/heads/main",
-  "timestamp": "2026-11-11T10:57:42.470826148Z",
+  "timestamp": "2026-11-11T12:31:07.930271607Z",
   "custom_metrics": [
     {
       "key": "code_complexity",
