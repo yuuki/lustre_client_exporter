@@ -311,7 +311,9 @@ describes the `pages per rpc` and `rpcs in flight` histograms from
 ### Historical RPC distributions
 
 Three families record bucketed history from the `pages per rpc`,
-`rpcs in flight`, and `offset` sections. The `size` label is the bucket
+`rpcs in flight`, and `offset` sections. Other tables in the file, such
+as the `RPC latency (us)` table that some Lustre client builds print
+after `offset`, are skipped. The `size` label is the bucket
 key from the file, not a measured byte count. The buckets are discrete
 counts, not Prometheus `le` histograms, so
 [`histogram_quantile`](https://prometheus.io/docs/practices/histograms/)

@@ -1,0 +1,31 @@
+snapshot_time:            1700000000.000000000 secs.nsecs
+start_time:               1699990000.000000000 secs.nsecs
+elapsed_time:             10000.000000000 secs.nsecs
+read RPCs in flight:  2
+write RPCs in flight: 1
+DIO RPCs in flight: 0
+pending write pages:  64
+pending read pages:   16
+
+			read			write
+pages per rpc         rpcs   % cum % |       rpcs   % cum %
+1:		        60  60  60   |         30  30  30
+2:		        20  20  80   |         30  30  60
+4:		        10  10  90   |         20  20  80
+256:		        10  10 100   |         20  20 100
+
+			read			write
+rpcs in flight        rpcs   % cum % |       rpcs   % cum %
+1:		        70  70  70   |         50  50  50
+2:		        20  20  90   |         40  40  90
+3:		        10  10 100   |         10  10 100
+
+			read			write
+offset                rpcs   % cum % |       rpcs   % cum %
+0:		        50  50  50   |         90  90  90
+1:		        30  30  80   |          0   0  90
+2:		        20  20 100   |         10  10 100
+
+			read			write
+RPC latency (us)       count   % cum % |       count   % cum %
+0:		         0   0   0   |          0   0   0
