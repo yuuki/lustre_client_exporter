@@ -1,7 +1,10 @@
 package parser
 
 import (
+	"fmt"
 	"os"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -87,6 +90,74 @@ func TestParseRPCStats_CurrentScalarsOSC(t *testing.T) {
 	}
 	if pending["read"] != 8 || pending["write"] != 120 {
 		t.Fatalf("pending = %v", pending)
+	}
+}
+
+// TestParseRPCStats_OSCLatencyTable parses an osc rpc_stats file that ends
+// with an "RPC latency (us)" table, as some Lustre client builds print after
+// the offset table. That table is not part of the public contract: its lone
+// "0:" bucket must not be read as a second offset bucket "0", which would
+// repeat the read and write series of lustre_rpcs_offset{size="0"}.
+func TestParseRPCStats_OSCLatencyTable(t *testing.T) {
+	data, err := os.ReadFile("../../testdata/osc/rpc_stats_latency.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	obs, err := ParseRPCStats(data, "src", "client", "tgt", "osc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertObservations(t, obs, []Observation{
+		rpcScalar("rpcs_current", "read", 2),
+		rpcScalar("rpcs_current", "write", 1),
+		rpcScalar("pending_pages", "write", 64),
+		rpcScalar("pending_pages", "read", 16),
+		rpcPagesPerRPC("read", "1", 60), rpcPagesPerRPC("write", "1", 30),
+		rpcPagesPerRPC("read", "2", 20), rpcPagesPerRPC("write", "2", 30),
+		rpcPagesPerRPC("read", "4", 10), rpcPagesPerRPC("write", "4", 20),
+		rpcPagesPerRPC("read", "256", 10), rpcPagesPerRPC("write", "256", 20),
+		rpcInFlight("read", "1", 70), rpcInFlight("write", "1", 50),
+		rpcInFlight("read", "2", 20), rpcInFlight("write", "2", 40),
+		rpcInFlight("read", "3", 10), rpcInFlight("write", "3", 10),
+		rpcOffset("read", "0", 50), rpcOffset("write", "0", 90),
+		rpcOffset("read", "1", 30), rpcOffset("write", "1", 0),
+		rpcOffset("read", "2", 20), rpcOffset("write", "2", 10),
+	})
+	assertUniqueSeries(t, obs)
+
+	// The latency table changes nothing: the same file without it gives the
+	// same observations.
+	before, _, found := strings.Cut(string(data), "RPC latency (us)")
+	if !found {
+		t.Fatal(`fixture has no "RPC latency (us)" table`)
+	}
+	without, err := ParseRPCStats([]byte(before), "src", "client", "tgt", "osc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertObservations(t, obs, without)
+}
+
+// assertUniqueSeries fails if two observations share a metric ID and label
+// set, which the Prometheus registry rejects for the whole scrape.
+func assertUniqueSeries(t *testing.T, obs []Observation) {
+	t.Helper()
+	seen := map[string]int{}
+	for i, o := range obs {
+		keys := make([]string, 0, len(o.Labels))
+		for k := range o.Labels {
+			keys = append(keys, k)
+		}
+		slices.Sort(keys)
+		var b strings.Builder
+		b.WriteString(o.MetricID)
+		for _, k := range keys {
+			fmt.Fprintf(&b, ",%s=%q", k, o.Labels[k])
+		}
+		if j, ok := seen[b.String()]; ok {
+			t.Errorf("[%d] repeats the series of [%d]: %s", i, j, b.String())
+		}
+		seen[b.String()] = i
 	}
 }
 
@@ -518,6 +589,42 @@ func TestParseRPCStats_Exact(t *testing.T) {
 				"offset   read   write\n1: 2 1 1\n" +
 				"pages per rpc   read   write\n2: 3 1 1\n",
 			want: []Observation{rpcInFlight("modify", "0", 1), rpcOffset("read", "1", 2), rpcPagesPerRPC("read", "2", 3)},
+		},
+		{
+			name: "an unknown table ends the previous section",
+			data: "offset  rpcs % cum % | rpcs % cum %\n0: 1 1 1 | 2 1 1\n" +
+				"   read   write\nRPC latency (us)  count % cum % | count % cum %\n0: 0 0 0 | 0 0 0\n1: 5 1 1 | 6 1 1\n2: 7\n",
+			want: []Observation{rpcOffset("read", "0", 1), rpcOffset("write", "0", 2)},
+		},
+		{
+			name: "an unknown table without a pipe ends the previous section",
+			data: "rpcs in flight  rpcs % cum %  rpcs % cum %\n1: 1 1 1  2 1 1\nsome table  usecs % cum %\n1: 3 1 1\n",
+			want: []Observation{rpcInFlight("read", "1", 1), rpcInFlight("write", "1", 2)},
+		},
+		{
+			name: "a known section after an unknown table",
+			data: "RPC latency (us)  count % cum %\n0: 1 1 1\npages per rpc  rpcs % cum %\n1: 2 1 1\n",
+			want: []Observation{rpcPagesPerRPC("read", "1", 2)},
+		},
+		{
+			name: "an unknown table names read and write",
+			data: "pages per rpc\n1: 1 1 1\nread write latency  count % cum %\n2: 2 1 1\n",
+			want: []Observation{rpcPagesPerRPC("read", "1", 1)},
+		},
+		{
+			name: "an unknown table clears the pending modify",
+			data: "modify\nRPC latency (us)  count % cum %\nrpcs in flight\n0: 3 1 1\n",
+			want: []Observation{rpcInFlight("read", "0", 3)},
+		},
+		{
+			name: "scalars after an unknown table",
+			data: "RPC latency (us)  count % cum %\nread RPCs in flight: 4\n0: 3 1 1\n",
+			want: []Observation{rpcScalar("rpcs_current", "read", 4), rpcInFlight("read", "0", 3)},
+		},
+		{
+			name: "column names alone do not end the section",
+			data: "pages per rpc\nrpcs % cum % | rpcs % cum %\n1: 6 1 1 | 7 1 1\ncount % cum %\n2: 8 1 1\n",
+			want: []Observation{rpcPagesPerRPC("read", "1", 6), rpcPagesPerRPC("write", "1", 7), rpcPagesPerRPC("read", "2", 8)},
 		},
 		{
 			name: "buckets before any section are ignored",

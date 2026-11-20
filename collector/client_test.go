@@ -411,6 +411,50 @@ offset                rpcs   % cum % |       rpcs   % cum %
 	}, 158331)
 }
 
+// TestClientCollector_RPCStatsLatencyTable scrapes an osc rpc_stats file that
+// ends with an "RPC latency (us)" table. Its "0:" bucket used to repeat the
+// lustre_rpcs_offset{size="0"} series, and the Prometheus registry then
+// failed the whole scrape.
+func TestClientCollector_RPCStatsLatencyTable(t *testing.T) {
+	const target = "testfs-OST0000-osc-ffff888000001000"
+	r := reader.NewFakeReader()
+	r.Globs["/proc/fs/lustre/osc/*/rpc_stats"] = []string{
+		"/proc/fs/lustre/osc/" + target + "/rpc_stats",
+	}
+	loadFixture(t, r, "/proc/fs/lustre/osc/"+target+"/rpc_stats", "../testdata/osc/rpc_stats_latency.txt")
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	c := NewClientCollector(r, discovery.DefaultPathConfig(), logger)
+	metrics, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for op, want := range map[string]float64{"read": 50, "write": 90} {
+		assertMetric(t, metrics, "lustre_rpcs_offset", map[string]string{
+			"component": "client",
+			"operation": op,
+			"size":      "0",
+			"target":    target,
+		}, want)
+	}
+
+	promRegistry := prometheus.NewRegistry()
+	promRegistry.MustRegister(NewRegistry(logger, 0, 0, c))
+	families, err := promRegistry.Gather()
+	if err != nil {
+		t.Fatalf("unexpected prometheus gather error: %v", err)
+	}
+	var offsets int
+	for _, mf := range families {
+		if mf.GetName() == "lustre_rpcs_offset" {
+			offsets = len(mf.GetMetric())
+		}
+	}
+	if offsets != 6 {
+		t.Fatalf("got %d lustre_rpcs_offset series, want 6 (3 buckets for read and write)", offsets)
+	}
+}
+
 func TestClientCollector_LDLMCBDStats(t *testing.T) {
 	r := reader.NewFakeReader()
 	loadFixture(t, r, "/proc/fs/lustre/ldlm/services/ldlm_cbd/stats", "../testdata/ldlm/ldlm_cbd_stats.txt")

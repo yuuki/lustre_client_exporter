@@ -263,7 +263,7 @@ func FuzzParseOBDStats(f *testing.F) {
 }
 
 func FuzzParseRPCStats(f *testing.F) {
-	addFixtures(f, "mdc/rpc_stats.txt", "osc/rpc_stats.txt")
+	addFixtures(f, "mdc/rpc_stats.txt", "osc/rpc_stats.txt", "osc/rpc_stats_latency.txt")
 	f.Fuzz(func(t *testing.T, data []byte) {
 		obs, err := parser.ParseRPCStats(data, fuzzSource, "client", fuzzTarget, "osc")
 		checkParse(t, data, obs, err, 2*lines(data))

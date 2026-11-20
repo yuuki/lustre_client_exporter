@@ -2,12 +2,14 @@ package parser
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 )
 
 // ParseRPCStats parses mdc/osc rpc_stats files.
-// Extracts pages_per_rpc, rpcs_in_flight, and offset sections.
+// Extracts pages_per_rpc, rpcs_in_flight, and offset sections; the buckets of
+// any other table are skipped.
 func ParseRPCStats(data []byte, source string, component string, target string, rpcType string) ([]Observation, error) {
 	var observations []Observation
 	var section rpcStatsSection
@@ -56,7 +58,7 @@ func ParseRPCStats(data []byte, source string, component string, target string, 
 // file belong to.
 type rpcStatsSection struct {
 	// name is "pages_per_rpc", "rpcs_in_flight" or "rpcs_offset", or empty
-	// before the first section header.
+	// before the first section header and inside a table of none of these.
 	name string
 	// operation labels the value of a bucket line without a write column;
 	// empty means "read".
@@ -68,7 +70,9 @@ type rpcStatsSection struct {
 
 // applyHeader updates s if line is a section, subsection or column header and
 // reports whether it was one. The prefixes are checked before the column
-// header test, so "offset  read  write" opens the offset section.
+// header test, so "offset  read  write" opens the offset section. The header
+// of any other table, such as "RPC latency (us)", ends the current section,
+// so that its buckets are skipped instead of read as the previous section's.
 func (s *rpcStatsSection) applyHeader(line string) bool {
 	switch {
 	case line == "modify":
@@ -87,6 +91,8 @@ func (s *rpcStatsSection) applyHeader(line string) bool {
 		s.enter("rpcs_in_flight", "write")
 	case strings.HasPrefix(line, "offset"):
 		s.enter("rpcs_offset", "")
+	case isTableHeader(line):
+		s.enter("", "")
 	case strings.Contains(line, "read") && strings.Contains(line, "write"):
 		// Column header line
 		s.pendingOperation = ""
@@ -102,6 +108,20 @@ func (s *rpcStatsSection) enter(name, operation string) {
 	s.name = name
 	s.operation = operation
 	s.pendingOperation = ""
+}
+
+// isTableHeader reports whether line is the header of a bucket table: a
+// title, then a column name followed by "% cum %" for each operation, as in
+// "RPC latency (us)  count  % cum % |  count  % cum %". A line of column
+// names alone, such as "rpcs  % cum %", has no title and is not one.
+func isTableHeader(line string) bool {
+	// Rule out the bucket lines, which are numbers, before splitting.
+	if !strings.Contains(line, "cum") {
+		return false
+	}
+	fields := strings.Fields(line)
+	i := slices.Index(fields, "%")
+	return i >= 2 && i+2 < len(fields) && fields[i+1] == "cum" && fields[i+2] == "%"
 }
 
 func parseRPCScalar(line string) (metricID, operation string, value float64, ok bool) {
