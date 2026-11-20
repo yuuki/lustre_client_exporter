@@ -1,9 +1,9 @@
 {
   "repository": "yuuki/lustre_client_exporter/complexity",
   "ref": "refs/heads/main",
-  "commit": "15f7ece1b3dc746af37586008f2ae38229937b65",
+  "commit": "44b89219e5db47afb22d4b8eebf3f0b45e0dae48",
   "base_ref": "refs/heads/main",
-  "timestamp": "2026-11-15T01:53:21.87016786Z",
+  "timestamp": "2026-11-20T01:51:14.468887676Z",
   "custom_metrics": [
     {
       "key": "code_complexity",
@@ -12,12 +12,12 @@
         {
           "key": "function_count",
           "name": "Function count",
-          "value": 122
+          "value": 123
         },
         {
           "key": "cognitive_sum",
           "name": "Cognitive: total",
-          "value": 324
+          "value": 326
         },
         {
           "key": "cognitive_max",
@@ -37,17 +37,17 @@
         {
           "key": "cyclomatic_sum",
           "name": "Cyclomatic: total",
-          "value": 396
+          "value": 402
         },
         {
           "key": "cyclomatic_max",
           "name": "Cyclomatic: max",
-          "value": 11
+          "value": 12
         },
         {
           "key": "cyclomatic_median",
           "name": "Cyclomatic: median",
-          "value": 2
+          "value": 3
         },
         {
           "key": "cyclomatic_p90",
